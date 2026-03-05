@@ -42,8 +42,14 @@ export const fetchGpuTrends = async () => {
     return response.json();
 };
 
-export const fetchWorkloadTopology = async () => {
-    const response = await fetch(`/api/workloads/topology`);
-    if (!response.ok) throw new Error('Failed to fetch workload topology');
+export const fetchK8sEvents = async () => {
+    const response = await fetch('/api/k8s/events');
+    if (!response.ok) throw new Error('Failed to fetch events');
+    return response.json();
+};
+
+export const fetchStartupAnalysis = async () => {
+    const response = await fetch('/api/k8s/startup-analysis');
+    if (!response.ok) throw new Error('Failed to fetch startup analysis');
     return response.json();
 };

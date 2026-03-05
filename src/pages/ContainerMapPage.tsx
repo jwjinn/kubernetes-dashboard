@@ -7,6 +7,7 @@ import type { ContainerData } from '@/features/kubernetes/components/ContainerBl
 import { useFilterStore } from '@/store/filterStore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ResourceDetailsSheet } from '@/features/kubernetes/components/ResourceDetailsSheet';
+import { Cpu, Zap } from 'lucide-react';
 
 export default function ContainerMapPage() {
     const [groupBy, setGroupBy] = useState<'node' | 'namespace'>('node');
@@ -40,10 +41,32 @@ export default function ContainerMapPage() {
                         <p className="text-muted-foreground text-sm mt-1 mb-3">
                             클러스터 내 모든 파드와 컨테이너의 실시간 자원 활용 상태(CPU/Memory)를 시각적인 블록 맵으로 한눈에 파악합니다.
                         </p>
-                        <div className="flex items-center gap-4 text-xs">
-                            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-emerald-500"></div><span className="text-muted-foreground">정상 (CPU 사용량 비례 진하기)</span></div>
-                            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-yellow-400"></div><span className="text-muted-foreground">경고/지연</span></div>
-                            <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-red-500"></div><span className="text-muted-foreground">장애/실패 (Failed)</span></div>
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded-sm bg-indigo-500"></div>
+                                <span className="text-muted-foreground font-medium">정상 [GPU] (사용량 비례 진하기)</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded-sm bg-emerald-500"></div>
+                                <span className="text-muted-foreground font-medium">정상 [CPU] (사용량 비례 진하기)</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded-sm bg-yellow-400"></div>
+                                <span className="text-muted-foreground font-medium">경고/지연 (Warning)</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-3 h-3 rounded-sm bg-red-500"></div>
+                                <span className="text-muted-foreground font-medium">장애/실패 (Failed)</span>
+                            </div>
+                            <div className="h-4 w-[1px] bg-border mx-1" />
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1 text-indigo-500 font-bold">
+                                    <Zap className="w-3 h-3 fill-current" /> <span>GPU 사용 파드</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-emerald-600 font-bold">
+                                    <Cpu className="w-3 h-3" /> <span>CPU 전용 파드</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

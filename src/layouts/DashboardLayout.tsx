@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useFilterStore } from '@/store/filterStore';
-import { Layers, Settings, Bell, User, Box, Network, Cpu, BarChart } from 'lucide-react';
+import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3 } from 'lucide-react';
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
@@ -11,12 +11,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const location = useLocation();
 
     const navItems = [
-        { path: '/dashboard', label: 'Overview (요약)', icon: Layers },
-        { path: '/containers', label: 'Container Map (파드 상태)', icon: Box },
-        { path: '/workloads', label: 'Workloads (배포망)', icon: Network },
-        { path: '/gpu', label: 'GPU Dashboard (자원 현황)', icon: Cpu },
-        { path: '/gpu-trend', label: 'GPU Trends (통계)', icon: BarChart },
-        { path: '/analysis', label: 'Pod Analysis (지능형 분석)', icon: BarChart },
+        { name: 'Cluster Overview', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Container Map', href: '/containers', icon: Box },
+        { name: '장애 진단 (Diagnosis)', href: '/workloads', icon: Activity },
+        { name: 'GPU Dashboard', href: '/gpu', icon: Cpu },
+        { name: 'GPU Trends (통계)', href: '/gpu-trend', icon: BarChart3 },
     ];
 
     return (
@@ -31,18 +30,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <nav className="flex-1 p-4 space-y-2">
                     {navItems.map((item) => {
                         const Icon = item.icon;
-                        const isActive = location.pathname.startsWith(item.path);
+                        const isActive = location.pathname === item.href;
                         return (
                             <Link
-                                key={item.path}
-                                to={item.path}
+                                key={item.href}
+                                to={item.href}
                                 className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${isActive
                                     ? 'bg-primary/10 text-primary font-semibold'
                                     : 'text-muted-foreground hover:bg-primary/5 hover:text-primary'
                                     }`}
                             >
                                 <Icon className="w-5 h-5" />
-                                <span className="font-medium">{item.label}</span>
+                                <span className="font-medium text-sm">{item.name}</span>
                             </Link>
                         );
                     })}

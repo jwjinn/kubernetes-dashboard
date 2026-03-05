@@ -144,17 +144,53 @@ export const handlers = [
         return HttpResponse.json({ success: true, message: `Pod ${params.podId} successfully terminated.` }, { status: 200 });
     }),
 
+    // Diagnosis & Events endpoints
+    http.get('/api/k8s/events', () => {
+        const events = [
+            { id: 1, type: 'Warning', reason: 'FailedScheduling', message: '0/4 nodes are available: 4 Insufficient gpu.', count: 42, lastTimestamp: '10m', component: 'default-scheduler', object: 'Pod/training-job-v2' },
+            { id: 2, type: 'Warning', reason: 'BackOff', message: 'Back-off restarting failed container', count: 12, lastTimestamp: '2m', component: 'kubelet, node-2', object: 'Pod/app-worker-A-2' },
+            { id: 3, type: 'Normal', reason: 'Scheduled', message: 'Successfully assigned default/app-worker-B-1 to node-1', count: 1, lastTimestamp: '15m', component: 'default-scheduler', object: 'Pod/app-worker-B-1' },
+            { id: 4, type: 'Warning', reason: 'Unhealthy', message: 'Liveness probe failed: HTTP probe failed with statuscode: 500', count: 5, lastTimestamp: '1m', component: 'kubelet, node-0', object: 'Pod/app-worker-A-0' },
+            { id: 5, type: 'Warning', reason: 'OOMKilled', message: 'Container used more memory than requested and was killed', count: 1, lastTimestamp: '30s', component: 'kubelet, node-3', object: 'Pod/app-worker-D-3' },
+            { id: 6, type: 'Normal', reason: 'Pulled', message: 'Successfully pulled image "nvidia/cuda:11.0-base"', count: 1, lastTimestamp: '12m', component: 'kubelet, node-1', object: 'Pod/app-worker-B-1' },
+        ];
+        return HttpResponse.json(events);
+    }),
+
+    http.get('/api/k8s/startup-analysis', () => {
+        const analysis = {
+            podName: 'app-worker-A-2',
+            status: 'Pending (ImagePullBackOff)',
+            phases: [
+                { name: 'Scheduled', duration: 1.2, status: 'completed', timestamp: '2026-03-05 16:30:12' },
+                { name: 'Initialized', duration: 0.5, status: 'completed', timestamp: '2026-03-05 16:30:13' },
+                { name: 'ImagePulling', duration: 45.0, status: 'failed', timestamp: '2026-03-05 16:30:13' },
+                { name: 'ContainerStarting', duration: 0, status: 'pending', timestamp: '-' },
+            ],
+            diagnosis: {
+                severity: 'Critical',
+                cause: '네트워크 대역폭 제한 및 프라이빗 레지스트리 인증 실패',
+                recommendation: '현재 node-2의 아웃바운드 트래픽이 임계치를 초과했습니다. 이미지 캐시 서버(Harbor)의 가용성을 확인하고, ImagePullPolicy를 "IfNotPresent"로 설정하여 중복 다운로드를 방지하세요.'
+            }
+        };
+        return HttpResponse.json(analysis);
+    }),
+
     // Container Map endpoints
     http.get('/api/k8s/containers', () => {
-        // Build containers based on the central nodes - rich environment
-        const containers = Array.from({ length: 40 }).map((_, i) => ({
+        // Build 16 containers (4 per node) to stay consistent with the 8-GPU scale
+        const containers = Array.from({ length: 16 }).map((_, i) => ({
             id: `container-${i}`,
-            name: `app-worker-${i}`,
-            namespace: NAMESPACES[Math.floor(Math.random() * NAMESPACES.length)],
-            node: CLUSTER_NODES[Math.floor(Math.random() * CLUSTER_NODES.length)],
-            status: Math.random() > 0.1 ? 'healthy' : 'warning',
-            cpuUsagePercent: Math.floor(Math.random() * 100),
-            memUsagePercent: Math.floor(Math.random() * 100),
+            name: `app-worker-${String.fromCharCode(65 + (i % 4))}-${Math.floor(i / 4)}`,
+            namespace: NAMESPACES[i % NAMESPACES.length],
+            node: CLUSTER_NODES[Math.floor(i / 4)],
+            resourceType: (i % 4 < 2) ? 'GPU' : 'CPU',
+            status: (i % 5 === 0) ? 'warning' : (i % 8 === 0) ? 'failed' : 'healthy', // Intentional status distribution
+            cpuUsagePercent: Math.floor(20 + Math.random() * 60),
+            memUsagePercent: Math.floor(30 + Math.random() * 50),
+            txCount: Math.floor(Math.random() * 1000),
+            hasTrace: Math.random() > 0.7,
+            cpuRequest: 500,
         }));
         return HttpResponse.json(containers);
     }),
@@ -172,23 +208,4 @@ export const handlers = [
     http.get('/api/gpu/trends', () => {
         return HttpResponse.json(STATIC_GPU_TRENDS);
     }),
-
-    // Workload Topology (Deployment -> Node link)
-    http.get('/api/workloads/topology', () => {
-        const nodes = [
-            { id: 'dep-1', type: 'default', position: { x: 250, y: 5 }, data: { label: 'Deployment: ai-inference-service' }, style: { background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px' } },
-            { id: 'pod-1', type: 'default', position: { x: 100, y: 150 }, data: { label: 'Pod: worker-a' }, style: { background: '#dcfce7', borderColor: '#22c55e', borderRadius: '8px' } },
-            { id: 'pod-2', type: 'default', position: { x: 400, y: 150 }, data: { label: 'Pod: worker-b' }, style: { background: '#dcfce7', borderColor: '#22c55e', borderRadius: '8px' } },
-            // Maps to node-0 and node-1
-            { id: 'n-0', type: 'default', position: { x: 100, y: 300 }, data: { label: `Node: ${CLUSTER_NODES[0]}` }, style: { border: '2px dashed #94a3b8' } },
-            { id: 'n-1', type: 'default', position: { x: 400, y: 300 }, data: { label: `Node: ${CLUSTER_NODES[1]}` }, style: { border: '2px dashed #94a3b8' } },
-        ];
-        const edges = [
-            { id: 'e1', source: 'dep-1', target: 'pod-1', animated: true },
-            { id: 'e2', source: 'dep-1', target: 'pod-2', animated: true },
-            { id: 'e3', source: 'pod-1', target: 'n-0', label: 'scheduled' },
-            { id: 'e4', source: 'pod-2', target: 'n-1', label: 'scheduled' },
-        ];
-        return HttpResponse.json({ nodes, edges });
-    })
 ];
