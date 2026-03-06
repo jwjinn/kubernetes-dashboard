@@ -23,6 +23,7 @@ import { TraceTab } from '@/features/analysis/components/TraceTab';
 import { EventsTab } from '@/features/analysis/components/EventsTab';
 import { MetricsTab } from '@/features/kubernetes/components/MetricsTab';
 import { ResourceRelationshipTab } from '@/features/analysis/components/ResourceRelationshipTab';
+import { LogViewer } from '@/features/logs/components/LogViewer';
 import { MoreVertical, ExternalLink } from 'lucide-react';
 import {
     Tooltip,
@@ -183,58 +184,14 @@ export default function AnalysisPage() {
                                 </TabPanel>
 
                                 <TabPanel className="h-full">
-                                    {/* Advanced Log Search UI Mock */}
-                                    <div className="flex flex-col h-full gap-4">
-                                        <div className="flex gap-4 items-end bg-muted/30 p-4 rounded-lg border border-border shrink-0">
-                                            <div className="flex-1 space-y-2">
-                                                <label className="text-[10px] font-bold text-muted-foreground uppercase flex gap-2"><History className="w-3 h-3" /> 시간 선택</label>
-                                                <TextInput placeholder="2025/01/20 19:42 ~ 2025/01/21 19:42" defaultValue="2025/01/21 19:42 (최근 1일)" />
+                                    <div className="h-full flex flex-col">
+                                        {selectedPod ? (
+                                            <LogViewer podName={selectedPod.name} height="h-full" />
+                                        ) : (
+                                            <div className="flex-1 flex items-center justify-center text-muted-foreground bg-muted/10 rounded-xl border border-dashed border-border">
+                                                대상을 선택해주세요.
                                             </div>
-                                            <div className="flex-1 space-y-2">
-                                                <label className="text-[10px] font-bold text-muted-foreground uppercase flex gap-2"><Filter className="w-3 h-3" /> 카테고리</label>
-                                                <Select defaultValue="stdout">
-                                                    <SelectTrigger className="w-full">
-                                                        <SelectValue placeholder="카테고리 선택" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="stdout">containerStdout</SelectItem>
-                                                        <SelectItem value="app">AppLog</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <button onClick={() => alert('설정된 조건으로 로그 검색을 완료했습니다.')} className="h-10 px-6 bg-indigo-600 text-white rounded-lg font-bold">로그 검색</button>
-                                        </div>
-
-                                        <div className="flex-1 bg-[#1e1e1e] rounded-xl overflow-hidden font-mono text-[11px] p-4 flex flex-col border border-black shadow-2xl">
-                                            <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
-                                                <div className="flex gap-4 text-white/50">
-                                                    <span className="flex items-center gap-2"><AlertCircle className="w-3 h-3" /> 태그 표시</span>
-                                                    <span className="flex items-center gap-2 font-bold text-indigo-400 underline underline-offset-4">로그 메뉴 이동 &gt;</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex-1 overflow-y-auto space-y-2 text-indigo-100/80">
-                                                <div className="flex gap-4">
-                                                    <span className="text-white/30 shrink-0">2025-01-21 19:41:48.755</span>
-                                                    <span className="p-0.5 bg-indigo-500/20 rounded text-indigo-300">app</span>
-                                                    <p>redis-cluster <span className="bg-yellow-500/20 text-yellow-300">Warning</span> Back-off restarting failed container </p>
-                                                </div>
-                                                <div className="p-4 bg-indigo-900/20 rounded-lg border border-indigo-500/20 mt-2">
-                                                    <Grid numItems={2} className="gap-2">
-                                                        <Text className="text-[10px] text-white/40 italic">containername: redis</Text>
-                                                        <Text className="text-[10px] text-white/40 italic">pod: redis-cluster-2</Text>
-                                                        <Text className="text-[10px] text-white/40 italic">oid: -1154643286</Text>
-                                                        <Text className="text-[10px] text-white/40 italic">ns: backend</Text>
-                                                    </Grid>
-                                                    <p className="mt-3 text-white">2025-01-21T10:41:40.136 * Connecting to MASTER 10.21.11.169:6379</p>
-                                                </div>
-                                                {Array.from({ length: 5 }).map((_, i) => (
-                                                    <div key={i} className="flex gap-4 opacity-70 border-t border-white/5 pt-1">
-                                                        <span className="text-white/30 shrink-0">2025-01-21 19:41:48.755</span>
-                                                        <p>redis-cluster-2 stdout F 1:S 21 Jan 2025 10:41:40.136 * MASTER &lt;-&gt; REPLICA sync started</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </TabPanel>
 
