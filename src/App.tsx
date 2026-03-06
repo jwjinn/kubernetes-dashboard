@@ -7,6 +7,7 @@ import WorkloadPage from '@/pages/WorkloadPage';
 import AnalysisPage from '@/pages/AnalysisPage';
 import GpuDashboardPage from '@/pages/GpuDashboardPage';
 import GpuTrendPage from '@/pages/GpuTrendPage';
+import LogsPage from '@/pages/LogsPage';
 import { Toaster } from '@/components/ui/toaster';
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ function App() {
           <Route path="/gpu" element={<GpuDashboardPage />} />
           <Route path="/gpu-trend" element={<GpuTrendPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
+          <Route path="/logs" element={<LogsPage />} />
         </Routes>
       </BrowserRouter>
       {/* Toast provider from shadcn/ui */}

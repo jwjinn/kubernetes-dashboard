@@ -258,4 +258,56 @@ export const handlers = [
     http.get('/api/gpu/trends', () => {
         return HttpResponse.json(STATIC_GPU_TRENDS);
     }),
+
+    // Logs API
+    http.get('/api/logs', ({ request }) => {
+        const url = new URL(request.url);
+        const podName = url.searchParams.get('pod');
+        const level = url.searchParams.get('level');
+        const search = url.searchParams.get('search')?.toLowerCase() || '';
+
+        const logs = [];
+        let baseTime = new Date().getTime() - 60000; // start 1 min ago
+        const levels = ['INFO', 'INFO', 'INFO', 'INFO', 'WARN', 'ERROR', 'DEBUG'];
+        const messages = [
+            'Connection established successfully.',
+            'Processed batch of 500 records.',
+            'Healthcheck passed.',
+            'Awaiting new tasks in queue.',
+            'High memory usage detected.',
+            'Transaction timeout after 30s.',
+            'Failed to connect to database.',
+            'ConfigMap reloaded.',
+            'Caching index refreshed.',
+            'OOMKilled warning imminent.'
+        ];
+
+        // Generate 50 random logs
+        for (let i = 0; i < 50; i++) {
+            const rawLevel = levels[Math.floor(Math.random() * levels.length)];
+            const rawMessage = messages[Math.floor(Math.random() * messages.length)];
+            const sourcePod = podName || `app-worker-${String.fromCharCode(65 + (i % 4))}-${Math.floor(i % 3)}`;
+
+            logs.push({
+                id: `log-${i}-${baseTime}`,
+                timestamp: new Date(baseTime).toISOString().replace('T', ' ').substring(0, 23),
+                level: rawLevel,
+                message: rawMessage,
+                source: sourcePod
+            });
+            baseTime += Math.floor(Math.random() * 2000); // advance time by 0-2s
+        }
+
+        // Apply filters
+        let filteredLogs = logs;
+        if (level && level !== 'ALL') {
+            filteredLogs = filteredLogs.filter(log => log.level === level);
+        }
+        if (search) {
+            filteredLogs = filteredLogs.filter(log => log.message.toLowerCase().includes(search));
+        }
+
+        // Reverse to show newest at bottom like a real tail (or keep chrono)
+        return HttpResponse.json(filteredLogs);
+    }),
 ];

@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useFilterStore } from '@/store/filterStore';
-import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3, Terminal } from 'lucide-react';
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
@@ -16,6 +16,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         { name: '장애 진단 (Diagnosis)', href: '/workloads', icon: Activity },
         { name: 'GPU Dashboard', href: '/gpu', icon: Cpu },
         { name: 'GPU Trends (통계)', href: '/gpu-trend', icon: BarChart3 },
+        { name: '로그 (Logs)', href: '/logs', icon: Terminal },
     ];
 
     return (
