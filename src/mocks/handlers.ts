@@ -13,24 +13,58 @@ export interface GpuDevice {
     status: 'Active' | 'Idle' | 'Error';
     utilization: number;
     uuid: string;
+    migMode: string;
+    migId: string;
+    migProfile: string;
+    namespace: string;
+    cronJob: string;
+    job: string;
+    pod: string;
+    ready: string;
+    podPhase: string;
+    restartCount: number;
+    age: string;
+    vramUsage: string;
+    vramTotal: string;
+    temperature: number;
 }
 
 const generateInitialGpuDevices = (): GpuDevice[] => {
     const devices: GpuDevice[] = [];
-    const model = 'NVIDIA A100'; // Standardized for demo
+    const model = 'NVIDIA A100-SXM4-40GB'; // Standardized for demo
+    const namespaces = ['-', 'gpu-job', 'default', 'ai-training'];
+    const jobs = ['-', 'infer-learn-train', 'deep-learn-train', 'data-prep'];
 
-    // 4 nodes * 2 GPUs = 8 devices total
-    for (let i = 0; i < 8; i++) {
-        const node = CLUSTER_NODES[Math.floor(i / 2)];
+    // 4 nodes * 3 GPUs (mix of P and M) = 12 devices total
+    for (let i = 0; i < 12; i++) {
+        const node = CLUSTER_NODES[Math.floor(i / 3)];
+        const isMig = Math.random() > 0.4;
+        const isActive = Math.random() > 0.3;
+        const jobName = isMig && isActive ? jobs[Math.floor(Math.random() * (jobs.length - 1)) + 1] : '-';
+        const nsName = jobName !== '-' ? namespaces[Math.floor(Math.random() * (namespaces.length - 1)) + 1] : '-';
 
         devices.push({
-            id: `dev-${i}`,
+            id: `nvidia${i % 4}`, // simulating nvidia0, nvidia1, etc per node
             node: node,
             model: model,
-            type: Math.random() > 0.5 ? 'P' : 'M', // Mixed for visualization
-            status: Math.random() > 0.1 ? 'Active' : 'Idle',
-            utilization: Math.floor(Math.random() * 100),
-            uuid: `GPU-${Math.random().toString(36).substring(2, 10)}-${i}`
+            type: isMig ? 'M' : 'P',
+            status: isActive ? 'Active' : 'Idle',
+            utilization: isActive ? Math.floor(20 + Math.random() * 80) : 0,
+            uuid: `GPU-${Math.random().toString(36).substring(2, 10)}-${i}`,
+            migMode: isMig ? '1' : '0',
+            migId: isMig ? Math.floor(Math.random() * 20).toString() : '-',
+            migProfile: isMig ? '1g.5gb' : '-',
+            namespace: nsName,
+            cronJob: jobName,
+            job: jobName !== '-' ? `${jobName}-${Math.floor(Math.random() * 10000)}` : '-',
+            pod: jobName !== '-' ? `${jobName}-${Math.floor(Math.random() * 10000)}-${Math.random().toString(36).substring(2, 7)}` : '-',
+            ready: isActive ? '1/1' : '0/1',
+            podPhase: isActive ? 'Running' : (Math.random() > 0.5 ? 'Succeeded' : '-'),
+            restartCount: Math.floor(Math.random() * 3),
+            age: `${Math.floor(1 + Math.random() * 60)}m`,
+            vramUsage: isActive ? `${Math.floor(5 + Math.random() * 30)} GiB` : '0 GiB',
+            vramTotal: '40 GiB',
+            temperature: Math.floor(30 + Math.random() * 50)
         });
     }
     return devices;
