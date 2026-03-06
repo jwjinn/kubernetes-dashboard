@@ -18,6 +18,20 @@ export const terminatePod = async (podId: string) => {
     return response.json();
 };
 
+export interface NpuDevice {
+    id: string;
+    node: string;
+    model: string;
+    status: 'Active' | 'Idle' | 'Error';
+    utilization: number;
+    uuid: string;
+    namespace: string;
+    pod: string;
+    vramUsage: string;
+    vramTotal: string;
+    temperature: number;
+}
+
 export const fetchContainerMap = async () => {
     const response = await fetch(`/api/k8s/containers`);
     if (!response.ok) throw new Error('Failed to fetch container map');
@@ -39,6 +53,18 @@ export const fetchGpuDevices = async () => {
 export const fetchGpuTrends = async () => {
     const response = await fetch(`/api/gpu/trends`);
     if (!response.ok) throw new Error('Failed to fetch gpu trends');
+    return response.json();
+};
+
+export const fetchNpuDevices = async () => {
+    const response = await fetch(`/api/npu/devices`);
+    if (!response.ok) throw new Error('Failed to fetch npu devices');
+    return response.json();
+};
+
+export const fetchNpuTrends = async () => {
+    const response = await fetch(`/api/npu/trends`);
+    if (!response.ok) throw new Error('Failed to fetch npu trends');
     return response.json();
 };
 

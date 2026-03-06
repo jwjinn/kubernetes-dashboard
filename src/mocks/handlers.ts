@@ -70,7 +70,51 @@ const generateInitialGpuDevices = (): GpuDevice[] => {
     return devices;
 };
 
+export interface NpuDevice {
+    id: string;
+    node: string;
+    model: string;
+    status: 'Active' | 'Idle' | 'Error';
+    utilization: number;
+    uuid: string;
+    namespace: string;
+    pod: string;
+    vramUsage: string;
+    vramTotal: string;
+    temperature: number;
+}
+
+const generateInitialNpuDevices = (): NpuDevice[] => {
+    const devices: NpuDevice[] = [];
+    const model = 'Rebellion ATOM-X';
+    const namespaces = ['-', 'npu-infer', 'default', 'ai-vision'];
+    const pods = ['-', 'atom-worker-v1', 'rebellion-model-serving', 'npu-stream-proc'];
+
+    for (let i = 0; i < 8; i++) {
+        const node = CLUSTER_NODES[Math.floor(i / 2)];
+        const isActive = Math.random() > 0.4;
+        const podName = isActive ? pods[Math.floor(Math.random() * (pods.length - 1)) + 1] : '-';
+        const nsName = podName !== '-' ? namespaces[Math.floor(Math.random() * (namespaces.length - 1)) + 1] : '-';
+
+        devices.push({
+            id: `npu${i % 2}`,
+            node: node,
+            model: model,
+            status: isActive ? 'Active' : 'Idle',
+            utilization: isActive ? Math.floor(10 + Math.random() * 90) : 0,
+            uuid: `NPU-${Math.random().toString(36).substring(2, 10)}-${i}`,
+            namespace: nsName,
+            pod: podName !== '-' ? `${podName}-${Math.floor(Math.random() * 10000)}` : '-',
+            vramUsage: isActive ? `${Math.floor(2 + Math.random() * 14)} GiB` : '0 GiB',
+            vramTotal: '16 GiB',
+            temperature: Math.floor(35 + Math.random() * 45)
+        });
+    }
+    return devices;
+};
+
 const STATIC_GPU_DEVICES = generateInitialGpuDevices();
+const STATIC_NPU_DEVICES = generateInitialNpuDevices();
 
 // --- MOCK CONSTANTS & HELPERS ---
 const getClusterSummary = () => {
@@ -166,7 +210,20 @@ const generateGpuTrends = () => {
     });
 };
 
+const generateNpuTrends = () => {
+    return STATIC_NPU_DEVICES.map(device => {
+        const dailyUtils = Array.from({ length: 31 }).map(() => Math.floor(Math.random() * 100));
+        return {
+            deviceId: device.id,
+            label: `${device.node} / ${device.model} / ${device.id}`,
+            uuid: device.uuid,
+            history: dailyUtils
+        };
+    });
+};
+
 const STATIC_GPU_TRENDS = generateGpuTrends();
+const STATIC_NPU_TRENDS = generateNpuTrends();
 
 export const handlers = [
     http.get('/api/clusters/summary', ({ request }) => {
@@ -257,6 +314,15 @@ export const handlers = [
 
     http.get('/api/gpu/trends', () => {
         return HttpResponse.json(STATIC_GPU_TRENDS);
+    }),
+
+    // NPU Mock Endpoints
+    http.get('/api/npu/devices', () => {
+        return HttpResponse.json(STATIC_NPU_DEVICES);
+    }),
+
+    http.get('/api/npu/trends', () => {
+        return HttpResponse.json(STATIC_NPU_TRENDS);
     }),
 
     // Logs API

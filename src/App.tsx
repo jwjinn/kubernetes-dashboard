@@ -7,6 +7,8 @@ import WorkloadPage from '@/pages/WorkloadPage';
 import AnalysisPage from '@/pages/AnalysisPage';
 import GpuDashboardPage from '@/pages/GpuDashboardPage';
 import GpuTrendPage from '@/pages/GpuTrendPage';
+import NpuDashboardPage from '@/pages/NpuDashboardPage';
+import NpuTrendPage from '@/pages/NpuTrendPage';
 import LogsPage from '@/pages/LogsPage';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -23,6 +25,8 @@ function App() {
           <Route path="/workloads" element={<WorkloadPage />} />
           <Route path="/gpu" element={<GpuDashboardPage />} />
           <Route path="/gpu-trend" element={<GpuTrendPage />} />
+          <Route path="/npu" element={<NpuDashboardPage />} />
+          <Route path="/npu-trend" element={<NpuTrendPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/logs" element={<LogsPage />} />
         </Routes>

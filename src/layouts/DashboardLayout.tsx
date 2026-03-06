@@ -8,15 +8,32 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
     const { selectedCluster, setCluster } = useFilterStore();
-    const location = useLocation();
+    const acceleratorMode = import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU';
 
-    const navItems = [
+    const baseNavItems = [
         { name: 'Cluster Overview', href: '/dashboard', icon: LayoutDashboard },
         { name: 'Container Map', href: '/containers', icon: Box },
         { name: '장애 진단 (Diagnosis)', href: '/workloads', icon: Activity },
+    ];
+
+    const gpuNavItems = [
         { name: 'GPU Dashboard', href: '/gpu', icon: Cpu },
         { name: 'GPU Trends (통계)', href: '/gpu-trend', icon: BarChart3 },
+    ];
+
+    const npuNavItems = [
+        { name: 'NPU Dashboard', href: '/npu', icon: Cpu },
+        { name: 'NPU Trends (통계)', href: '/npu-trend', icon: BarChart3 },
+    ];
+
+    const commonBottomItems = [
         { name: '로그 (Logs)', href: '/logs', icon: Terminal },
+    ];
+
+    const navItems = [
+        ...baseNavItems,
+        ...(acceleratorMode === 'NPU' ? npuNavItems : gpuNavItems),
+        ...commonBottomItems
     ];
 
     return (
@@ -24,8 +41,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             {/* Sidebar (LNB) */}
             <aside className="w-64 bg-card border-r border-border flex flex-col z-20">
                 <div className="h-16 flex items-center px-6 border-b border-border">
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2">
-                        <Cpu className="w-6 h-6 text-indigo-500" /> InfraMap
+                    <h1 className={`text-xl font-bold bg-gradient-to-r bg-clip-text text-transparent flex items-center gap-2 ${acceleratorMode === 'NPU' ? 'from-green-500 to-emerald-700' : 'from-blue-400 to-indigo-500'}`}>
+                        <Cpu className={`w-6 h-6 ${acceleratorMode === 'NPU' ? 'text-green-500' : 'text-indigo-500'}`} />
+                        {acceleratorMode === 'NPU' ? 'InfraMap NPU' : 'InfraMap GPU'}
                     </h1>
                 </div>
                 <nav className="flex-1 p-4 space-y-2">
