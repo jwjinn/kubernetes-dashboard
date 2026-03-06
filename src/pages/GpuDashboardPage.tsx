@@ -159,14 +159,14 @@ export default function GpuDashboardPage() {
                                 <Metric className="text-4xl font-black text-foreground">{summaryStats.physicalActive + summaryStats.migActive + 14}</Metric>
                             </div>
                             <div className="flex flex-col items-center">
-                                <Text className="flex items-center gap-1.5 text-xs font-bold text-blue-600 uppercase mb-1">
-                                    <div className="w-2.5 h-2.5 bg-blue-500 rounded-[3px]"></div> Running
+                                <Text className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 uppercase mb-1 whitespace-nowrap">
+                                    <div className="w-2.5 h-2.5 bg-blue-500 rounded-[3px]"></div> GPU 사용 중
                                 </Text>
                                 <Metric className="text-4xl font-black text-blue-500">{summaryStats.physicalActive + summaryStats.migActive}</Metric>
                             </div>
                             <div className="flex flex-col items-center">
-                                <Text className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase mb-1">
-                                    <div className="w-2.5 h-2.5 bg-gray-300 rounded-[3px]"></div> Unknown
+                                <Text className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase mb-1 whitespace-nowrap">
+                                    <div className="w-2.5 h-2.5 bg-gray-300 rounded-[3px]"></div> CPU 전용
                                 </Text>
                                 <Metric className="text-4xl font-black text-gray-400">14</Metric>
                             </div>
@@ -276,7 +276,7 @@ export default function GpuDashboardPage() {
                     </Card>
 
                     {/* 3. 사용량 및 Performance Summary */}
-                    <div className="col-span-2 space-y-6">
+                    <div className="col-span-2 flex flex-col space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                             <Card className={`p-4 flex flex-col justify-start transition-colors border-border shadow-sm ${selectedMapNode ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''}`}>
                                 <Text className="font-bold text-foreground mb-4">{selectedMapNode ? 'Node Memory' : 'Total VRAM Memory'}</Text>
@@ -304,28 +304,28 @@ export default function GpuDashboardPage() {
                             </Card>
                         </div>
 
-                        <Card className={`p-0 overflow-hidden ${selectedMapNode ? 'border-blue-500/20 shadow-blue-500/10' : ''}`}>
+                        <Card className={`p-0 flex-1 flex flex-col overflow-hidden ${selectedMapNode ? 'border-blue-500/20 shadow-blue-500/10' : ''}`}>
                             <div className="px-4 py-3 border-b border-border bg-muted/20">
                                 <h3 className="font-bold text-sm">
                                     {selectedMapNode ? `Performance for Node: ${selectedMapNode}` : 'GPU Performance Summary (Top 5)'}
                                 </h3>
                             </div>
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-8 p-4">
-                                <div>
-                                    <Text className="font-bold text-xs mb-2">Utilization (%) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
-                                    <ReactECharts option={utilData} style={{ height: '150px' }} notMerge={true} />
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-8 p-6 flex-1">
+                                <div className="h-full">
+                                    <Text className="font-bold text-xs mb-2 text-foreground">Utilization (%) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
+                                    <ReactECharts option={utilData} style={{ height: '240px' }} notMerge={true} />
                                 </div>
-                                <div>
-                                    <Text className="font-bold text-xs mb-2">VRAM Usage (MiB) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
-                                    <ReactECharts option={vramData} style={{ height: '150px' }} notMerge={true} />
+                                <div className="h-full">
+                                    <Text className="font-bold text-xs mb-2 text-foreground">VRAM Usage (MiB) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
+                                    <ReactECharts option={vramData} style={{ height: '240px' }} notMerge={true} />
                                 </div>
-                                <div>
-                                    <Text className="font-bold text-xs mb-2">Temperature (°C) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
-                                    <ReactECharts option={tempData} style={{ height: '150px' }} notMerge={true} />
+                                <div className="h-full">
+                                    <Text className="font-bold text-xs mb-2 text-foreground">Temperature (°C) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
+                                    <ReactECharts option={tempData} style={{ height: '240px' }} notMerge={true} />
                                 </div>
-                                <div>
-                                    <Text className="font-bold text-xs mb-2">SM Active (%) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
-                                    <ReactECharts option={smData} style={{ height: '150px' }} notMerge={true} />
+                                <div className="h-full">
+                                    <Text className="font-bold text-xs mb-2 text-foreground">SM Active (%) {selectedMapNode ? '(Node GPUs)' : ''}</Text>
+                                    <ReactECharts option={smData} style={{ height: '240px' }} notMerge={true} />
                                 </div>
                             </div>
                         </Card>

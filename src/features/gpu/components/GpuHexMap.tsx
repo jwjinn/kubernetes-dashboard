@@ -99,19 +99,20 @@ export function GpuHexMap({ data, selectedNode, onNodeSelect, groupBy = 'Node', 
     };
 
     return (
-        <div className="flex flex-col gap-8 w-full h-full overflow-y-auto pb-8">
+        <div className="flex flex-col gap-4 w-full h-full overflow-y-auto pb-8 pr-2">
             {Object.entries(groupedData).map(([nodeName, devices]) => (
                 <div
                     key={nodeName}
                     onClick={() => onNodeSelect && onNodeSelect(selectedNode === nodeName ? null : nodeName)}
-                    className={`rounded-lg p-6 transition-colors ${selectedNode === nodeName ? 'bg-blue-50/50 ring-1 ring-blue-500' : 'bg-transparent'}`}
+                    className={`rounded-lg p-4 transition-colors border shadow-sm cursor-pointer ${selectedNode === nodeName ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-background border-border hover:border-gray-400'
+                        }`}
                 >
                     {groupBy !== 'None' && (
-                        <h4 className={`text-sm font-bold mb-4 ${selectedNode === nodeName ? 'text-blue-700' : 'text-foreground'}`}>
+                        <h4 className={`text-sm font-bold mb-3 ${selectedNode === nodeName ? 'text-blue-700' : 'text-foreground'}`}>
                             {nodeName}
                         </h4>
                     )}
-                    <div className="pt-2">
+                    <div className="pt-1">
                         {renderHexGrid(devices)}
                     </div>
                 </div>
