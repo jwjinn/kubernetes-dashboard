@@ -13,7 +13,7 @@ import { Search } from 'lucide-react';
 export default function GpuDashboardPage() {
     const [selectedGpu, setSelectedGpu] = useState<string | null>(null);
     const [selectedMapNode, setSelectedMapNode] = useState<string | null>(null);
-    const [groupBy, setGroupBy] = useState<'None' | 'Node'>('None');
+    const [groupBy, setGroupBy] = useState<'None' | 'Node'>('Node');
     const [colorBy, setColorBy] = useState<'Status' | 'GPU Utilization'>('GPU Utilization');
 
     // Fetch unified mock data for Map and Table
@@ -134,7 +134,7 @@ export default function GpuDashboardPage() {
                 </div>
 
                 {/* 1. GPU 리소스 상태 요약 */}
-                <Grid numItemsSm={2} numItemsLg={4} className="gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Card className="p-4 border-border shadow-sm flex flex-col justify-between">
                         <Text className="font-bold text-foreground mb-4">GPU Node</Text>
                         <div className="flex justify-between items-end px-2">
@@ -210,7 +210,7 @@ export default function GpuDashboardPage() {
                             </div>
                         </div>
                     </Card>
-                </Grid>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* 2. GPU Map */}
@@ -277,7 +277,7 @@ export default function GpuDashboardPage() {
 
                     {/* 3. 사용량 및 Performance Summary */}
                     <div className="col-span-2 space-y-6">
-                        <Grid numItemsSm={2} numItemsLg={4} className="gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                             <Card className={`p-4 flex flex-col justify-start transition-colors border-border shadow-sm ${selectedMapNode ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''}`}>
                                 <Text className="font-bold text-foreground mb-4">{selectedMapNode ? 'Node Memory' : 'Total VRAM Memory'}</Text>
                                 <Metric className="text-3xl font-black text-foreground">
@@ -302,7 +302,7 @@ export default function GpuDashboardPage() {
                                     9.04 <span className="text-lg text-muted-foreground font-semibold">GiB</span>
                                 </Metric>
                             </Card>
-                        </Grid>
+                        </div>
 
                         <Card className={`p-0 overflow-hidden ${selectedMapNode ? 'border-blue-500/20 shadow-blue-500/10' : ''}`}>
                             <div className="px-4 py-3 border-b border-border bg-muted/20">
