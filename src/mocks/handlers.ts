@@ -35,25 +35,25 @@ const generateInitialGpuDevices = (): GpuDevice[] => {
     const namespaces = ['-', 'gpu-job', 'default', 'ai-training'];
     const jobs = ['-', 'infer-learn-train', 'deep-learn-train', 'data-prep'];
 
-    // 4 nodes * 3 GPUs (mix of P and M) = 12 devices total
-    for (let i = 0; i < 12; i++) {
-        const node = CLUSTER_NODES[Math.floor(i / 3)];
-        const isMig = Math.random() > 0.4;
+    // 4 nodes * 2 GPUs (Physical only) = 8 devices total
+    for (let i = 0; i < 8; i++) {
+        const node = CLUSTER_NODES[Math.floor(i / 2)];
+        const isMig = false; // Only Physical GPUs (PP) per user request
         const isActive = Math.random() > 0.3;
-        const jobName = isMig && isActive ? jobs[Math.floor(Math.random() * (jobs.length - 1)) + 1] : '-';
+        const jobName = isActive ? jobs[Math.floor(Math.random() * (jobs.length - 1)) + 1] : '-';
         const nsName = jobName !== '-' ? namespaces[Math.floor(Math.random() * (namespaces.length - 1)) + 1] : '-';
 
         devices.push({
-            id: `nvidia${i % 4}`, // simulating nvidia0, nvidia1, etc per node
+            id: `nvidia${i % 2}`, // simulating nvidia0, nvidia1 per node
             node: node,
             model: model,
-            type: isMig ? 'M' : 'P',
+            type: 'P',
             status: isActive ? 'Active' : 'Idle',
             utilization: isActive ? Math.floor(20 + Math.random() * 80) : 0,
             uuid: `GPU-${Math.random().toString(36).substring(2, 10)}-${i}`,
-            migMode: isMig ? '1' : '0',
-            migId: isMig ? Math.floor(Math.random() * 20).toString() : '-',
-            migProfile: isMig ? '1g.5gb' : '-',
+            migMode: '0',
+            migId: '-',
+            migProfile: '-',
             namespace: nsName,
             cronJob: jobName,
             job: jobName !== '-' ? `${jobName}-${Math.floor(Math.random() * 10000)}` : '-',
@@ -114,8 +114,9 @@ const generateTopologyData = (clusterId: string, focusNodeId?: string | null) =>
         const nodeGpus = STATIC_GPU_DEVICES.filter(d => d.node === nodeId);
         nodeGpus.forEach((gpu, gIdx) => {
             // Arrange 2 GPUs side-by-side per node
+            const uniqueGpuId = `${nodeId}-${gpu.id}`;
             nodes.push({
-                id: gpu.id,
+                id: uniqueGpuId,
                 type: 'gpuNode',
                 position: {
                     x: xOffset + gIdx * 200,
@@ -123,7 +124,7 @@ const generateTopologyData = (clusterId: string, focusNodeId?: string | null) =>
                 },
                 data: { label: `${gpu.model}`, status: 'healthy' }
             });
-            edges.push({ id: `e-${nodeId}-${gpu.id}`, source: nodeId, target: gpu.id, animated: true });
+            edges.push({ id: `e-${nodeId}-${uniqueGpuId}`, source: nodeId, target: uniqueGpuId, animated: true });
         });
     });
 
