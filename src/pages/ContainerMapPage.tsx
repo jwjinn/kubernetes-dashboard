@@ -91,6 +91,17 @@ export default function ContainerMapPage() {
                                 <div className="w-3 h-3 rounded-sm bg-red-500"></div>
                                 <span className="text-muted-foreground">Failed</span>
                             </div>
+
+                            <div className="h-3 w-[1px] bg-border mx-1"></div>
+
+                            <div className="flex items-center gap-1.5">
+                                <Zap className="w-3 h-3 text-yellow-500" fill="currentColor" />
+                                <span className="text-muted-foreground">GPU Chip</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <Cpu className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-muted-foreground">CPU Base</span>
+                            </div>
                         </div>
                     </div>
 
