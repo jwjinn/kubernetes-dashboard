@@ -153,6 +153,10 @@ export const handlers = [
             { id: 4, type: 'Warning', reason: 'Unhealthy', message: 'Liveness probe failed: HTTP probe failed with statuscode: 500', count: 5, lastTimestamp: '1m', component: 'kubelet, node-0', object: 'Pod/app-worker-A-0' },
             { id: 5, type: 'Warning', reason: 'OOMKilled', message: 'Container used more memory than requested and was killed', count: 1, lastTimestamp: '30s', component: 'kubelet, node-3', object: 'Pod/app-worker-D-3' },
             { id: 6, type: 'Normal', reason: 'Pulled', message: 'Successfully pulled image "nvidia/cuda:11.0-base"', count: 1, lastTimestamp: '12m', component: 'kubelet, node-1', object: 'Pod/app-worker-B-1' },
+            { id: 7, type: 'Normal', reason: 'Pulled', message: 'Successfully pulled image "alpine:latest"', count: 1, lastTimestamp: '8m', component: 'kubelet, node-0', object: 'Pod/app-worker-B-0' },
+            { id: 8, type: 'Normal', reason: 'Started', message: 'Started container app', count: 1, lastTimestamp: '7m', component: 'kubelet, node-0', object: 'Pod/app-worker-B-0' },
+            { id: 9, type: 'Warning', reason: 'FailedMount', message: 'MountVolume.SetUp failed for volume "data" : secret "app-secret" not found', count: 3, lastTimestamp: '4m', component: 'kubelet, node-1', object: 'Pod/app-worker-C-1' },
+            { id: 10, type: 'Normal', reason: 'Killing', message: 'Stopping container app', count: 1, lastTimestamp: '1m', component: 'kubelet, node-0', object: 'Pod/app-worker-A-0' },
         ];
         return HttpResponse.json(events);
     }),
@@ -191,6 +195,9 @@ export const handlers = [
             txCount: Math.floor(Math.random() * 1000),
             hasTrace: Math.random() > 0.7,
             cpuRequest: 500,
+            image: i % 2 === 0 ? 'nginx:1.21-alpine' : 'java:11-jre',
+            serviceName: `service-${String.fromCharCode(65 + (i % 4))}`,
+            volume: { type: i % 2 === 0 ? 'HostPath' : 'ConfigMap', path: i % 2 === 0 ? '/run/containerd/containerd.sock' : '/etc/config' }
         }));
         return HttpResponse.json(containers);
     }),

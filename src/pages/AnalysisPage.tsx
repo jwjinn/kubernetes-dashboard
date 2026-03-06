@@ -1,130 +1,311 @@
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { fetchContainerMap } from '@/api';
+import type { ContainerData } from '@/features/kubernetes/components/ContainerBlock';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
-import { Card, Text, Metric, Grid, Badge, Flex } from '@tremor/react';
-import ReactECharts from 'echarts-for-react';
-import { AlertCircle, CheckCircle2, Clock, Lightbulb, ServerCrash } from 'lucide-react';
+import { Card, Text, Metric, Grid, Badge, Flex, TabGroup, TabList, Tab, TabPanels, TabPanel, TextInput } from '@tremor/react';
+import {
+    Search, Filter, ChevronRight, Activity, FileText,
+    Share2, History, Zap, Settings, Box, LayoutGrid,
+    AlertCircle, CheckCircle2, Info, ChevronDown, ListFilter, X
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { TraceTab } from '@/features/analysis/components/TraceTab';
+import { EventsTab } from '@/features/analysis/components/EventsTab';
+import { MetricsTab } from '@/features/kubernetes/components/MetricsTab';
+import { ResourceRelationshipTab } from '@/features/analysis/components/ResourceRelationshipTab';
+import { MoreVertical, ExternalLink } from 'lucide-react';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export default function AnalysisPage() {
-    // Mock Data for Pod Startup Phases
-    const startupData = {
-        tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'shadow' }
-        },
-        legend: { data: ['Scheduling', 'Image Pull', 'Container Create', 'App Ready'] },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'value', name: 'Seconds' },
-        yAxis: {
-            type: 'category',
-            data: ['api-server-8f4', 'worker-job-2b1', 'redis-cache-9x', 'frontend-ui-5c']
-        },
-        series: [
-            { name: 'Scheduling', type: 'bar', stack: 'total', data: [1.2, 0.5, 0.8, 1.0] },
-            { name: 'Image Pull', type: 'bar', stack: 'total', data: [15.3, 2.1, 5.5, 12.0] },
-            { name: 'Container Create', type: 'bar', stack: 'total', data: [2.1, 1.5, 1.8, 2.2] },
-            { name: 'App Ready', type: 'bar', stack: 'total', data: [8.5, 4.0, 2.5, 5.0] }
-        ]
-    };
+    const [searchParams] = useSearchParams();
+    const namespaceParam = searchParams.get('namespace');
+    const podNameParam = searchParams.get('podName');
 
-    const pendingPods = [
-        { name: 'data-processor-xyz', namespace: 'data-team', reason: 'InsufficientCPU', age: '15m' },
-        { name: 'ml-inference-v2', namespace: 'ai-ops', reason: 'ImagePullBackOff', age: '2h' },
-    ];
+    const [selectedTab, setSelectedTab] = useState(0);
+    const [expandedPodId, setExpandedPodId] = useState<string | null>(null);
+    const [isManifestOpen, setIsManifestOpen] = useState(false);
+    const navigate = useNavigate();
+
+    const { data: containers = [], isLoading } = useQuery<ContainerData[]>({
+        queryKey: ['containerMap'],
+        queryFn: fetchContainerMap,
+        refetchInterval: 5000,
+    });
+
+    // Find the currently selected pod from the URL params
+    const selectedPod = containers.find(c => c.namespace === namespaceParam && c.name === podNameParam);
+
+    useEffect(() => {
+        if (selectedPod) {
+            setExpandedPodId(selectedPod.id);
+        } else {
+            setExpandedPodId(null);
+        }
+    }, [selectedPod]);
 
     return (
         <DashboardLayout>
-            <div className="space-y-6 animate-in fade-in duration-500">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Pod Analysis (지능형 분석)</h2>
-                    <p className="text-muted-foreground text-sm mt-1">
-                        파드 시작 시퀀스를 분석하여 지연 구간을 파악하고, Pending 상태인 파드의 원인을 자동으로 진단하여 해결책을 제시합니다.
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* 1. Pod Start Analysis */}
-                    <Card className="col-span-1 lg:col-span-2">
-                        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                            <Clock className="w-5 h-5 text-blue-500" />
-                            파드 시작 지연 분석 (Pod Startup Phases)
-                        </h3>
-                        <p className="text-sm text-muted-foreground mb-6">
-                            최근 배포된 파드들이 Ready 상태가 되기까지 소요된 각 단계별(스케줄링, 이미지 다운로드 등) 시간을 시각화합니다. 특정 단계에서 병목이 발생하는지 확인하세요.
-                        </p>
-                        <ReactECharts option={startupData} style={{ height: '350px' }} />
-                    </Card>
-
-                    {/* 2. Error / Pending Summary */}
-                    <div className="space-y-6">
-                        <Card decoration="top" decorationColor="red">
-                            <Text>총 Pending/Error 파드</Text>
-                            <Metric className="text-red-500">2 건</Metric>
-                            <Flex className="mt-4">
-                                <Text>Insufficient CPU</Text>
-                                <Text>1</Text>
-                            </Flex>
-                            <Flex className="mt-2">
-                                <Text>Image Pull Error</Text>
-                                <Text>1</Text>
-                            </Flex>
-                        </Card>
-
-                        <Card className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border-indigo-500/20">
-                            <h3 className="font-semibold text-indigo-700 flex items-center gap-2 mb-2">
-                                <Lightbulb className="w-5 h-5" />
-                                AI Insight 진단
-                            </h3>
-                            <p className="text-sm text-indigo-900/80 leading-relaxed font-medium">
-                                현재 <span className="font-bold">data-team</span> 물리 노드의 CPU 할당량이 95%를 초과하여 새 파드 스케줄링이 지연되고 있습니다.
-                                <br /><br />
-                                <span className="font-bold">추천 조치:</span> HPA 임계값을 조정하거나, 새로운 Node Group을 스케일 아웃(Scale-out) 하세요.
+            <div className="h-[calc(100vh-140px)] flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Header Section */}
+                <div className="flex justify-between items-center bg-card p-4 rounded-xl border border-border shadow-sm shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white shadow-sm ${selectedPod ? (selectedPod.status === 'healthy' ? 'bg-blue-600' : selectedPod.status === 'warning' ? 'bg-amber-500' : 'bg-red-500') : 'bg-indigo-600'}`}>
+                            <Box className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight">
+                                {selectedPod ? selectedPod.name : 'Pod Analysis'}
+                            </h2>
+                            <p className="text-muted-foreground text-xs font-medium">
+                                {selectedPod ? '단일 파드 상세 분석 및 리소스 진단' : 'Container Map에서 분석할 대상을 선택해주세요.'}
                             </p>
-                        </Card>
+                        </div>
                     </div>
+                    {selectedPod && (
+                        <div className="flex gap-2">
+                            <Badge color="gray" size="sm" className="px-3 py-1 text-xs">Node: {selectedPod.node}</Badge>
+                            <Badge color="gray" size="sm" className="px-3 py-1 text-xs">Namespace: {selectedPod.namespace}</Badge>
+                            <Badge color={selectedPod.status === 'healthy' ? 'blue' : selectedPod.status === 'warning' ? 'yellow' : 'red'} size="sm" className="px-3 py-1 text-xs uppercase font-bold text-white shadow-sm">
+                                Status: {selectedPod.status}
+                            </Badge>
+                        </div>
+                    )}
                 </div>
 
-                {/* 3. Pending Pods List & Solutions */}
-                <h3 className="text-lg font-semibold mt-8 mb-4">Pending 파드 상세 분석 및 추천 조치</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {pendingPods.map((pod, idx) => (
-                        <Card key={idx} className="border-l-4 border-l-amber-500">
-                            <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <h4 className="font-bold text-base">{pod.name}</h4>
-                                    <div className="text-xs text-muted-foreground flex gap-2 mt-1">
-                                        <Badge color="amber" size="sm">{pod.reason}</Badge>
-                                        <span>Namespace: {pod.namespace}</span>
-                                        <span>Age: {pod.age}</span>
+                <div className="flex-1 flex gap-4 overflow-hidden">
+                    {/* LEFT PANEL: Single Pod Details */}
+                    <div className="w-[360px] flex flex-col gap-4 shrink-0 overflow-hidden">
+                        {selectedPod ? (
+                            <Card className="flex-1 p-0 border-border shadow-sm flex flex-col overflow-hidden bg-card">
+                                <div className="p-4 border-b border-border bg-muted/20">
+                                    <Text className="font-extrabold flex items-center gap-2">
+                                        <Info className="w-4 h-4 text-indigo-500" /> 대상 상세 정보
+                                    </Text>
+                                </div>
+                                <div className="p-4 space-y-4 overflow-y-auto">
+                                    {/* Quick Info Grid */}
+                                    <div className="grid grid-cols-2 gap-3 mb-6">
+                                        <div className="bg-muted/30 p-3 rounded-lg border border-border">
+                                            <Text className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Namespace</Text>
+                                            <Text className="text-xs font-semibold text-foreground truncate">{selectedPod.namespace}</Text>
+                                        </div>
+                                        <div className="bg-muted/30 p-3 rounded-lg border border-border">
+                                            <Text className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Node</Text>
+                                            <Text className="text-[11px] font-semibold text-foreground truncate flex items-center gap-1 cursor-pointer hover:text-indigo-600" onClick={() => navigate('/dashboard')}>
+                                                {selectedPod.node} <ExternalLink className="w-3 h-3 opacity-50" />
+                                            </Text>
+                                        </div>
+                                        <div className="bg-muted/30 p-3 rounded-lg border border-border col-span-2">
+                                            <Text className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Image</Text>
+                                            <Text className="text-[11px] font-medium text-blue-600 truncate bg-blue-50/50 p-1.5 rounded">{selectedPod.image || 'N/A'}</Text>
+                                        </div>
+                                        <div className="bg-muted/30 p-3 rounded-lg border border-border col-span-2">
+                                            <Text className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Service Name</Text>
+                                            <Text className="text-[11px] font-medium text-foreground truncate">{selectedPod.serviceName || 'N/A'}</Text>
+                                        </div>
+                                    </div>
+
+                                    {/* Resource Metrics Summary */}
+                                    <div className="space-y-3">
+                                        <Text className="text-xs font-bold border-b border-border pb-1">Current Resource Usage</Text>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="border border-border/50 rounded p-2">
+                                                <Text className="text-[10px] text-muted-foreground font-bold uppercase mb-1">CPU Usage</Text>
+                                                <div className="flex items-end gap-2">
+                                                    <Metric className="text-lg font-black">{selectedPod.cpuUsagePercent}%</Metric>
+                                                </div>
+                                            </div>
+                                            <div className="border border-border/50 rounded p-2">
+                                                <Text className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Memory Usage</Text>
+                                                <div className="flex items-end gap-2">
+                                                    <Metric className="text-lg font-black">{selectedPod.memUsagePercent}%</Metric>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="pt-6 border-t border-border mt-6 grid grid-cols-2 gap-2">
+                                        <button onClick={() => setIsManifestOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 text-xs font-bold rounded hover:bg-indigo-100 transition-colors">
+                                            <FileText className="w-3.5 h-3.5" /> Manifest
+                                        </button>
+                                        <button onClick={() => navigate('/dashboard')} className="flex items-center justify-center gap-2 px-4 py-2 bg-muted text-foreground text-xs font-bold rounded hover:bg-muted/80 transition-colors">
+                                            <ExternalLink className="w-3.5 h-3.5" /> Go to Node
+                                        </button>
                                     </div>
                                 </div>
-                                <AlertCircle className="w-6 h-6 text-amber-500" />
-                            </div>
-
-                            <div className="bg-muted p-3 rounded-md text-sm text-foreground/80 space-y-2">
-                                <div className="flex gap-2 font-medium text-foreground">
-                                    <ServerCrash className="w-4 h-4" /> 근본 원인 (Root Cause)
+                            </Card>
+                        ) : (
+                            <Card className="flex-1 p-8 border-dashed border-2 border-border flex flex-col items-center justify-center text-center bg-muted/10">
+                                <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center mb-4">
+                                    <Box className="w-10 h-10 text-indigo-300" />
                                 </div>
-                                <p>
-                                    {pod.reason === 'InsufficientCPU'
-                                        ? '요청한 파드의 CPU Request(2.0)를 수용할 수 있는 잔여 자원을 가진 노드가 클러스터 내에 없습니다.'
-                                        : '이미지 저장소(Registry) 인증 실패 또는 유효하지 않은 이미지 태그(v2-latest)를 참조하고 있습니다.'}
-                                </p>
-                            </div>
+                                <Text className="text-lg font-bold text-foreground mb-2">대상 선택 필요</Text>
+                                <Text className="text-sm text-muted-foreground max-w-[250px]">
+                                    Container Map에서 특정 파드를 선택하여 상세 분석 화면으로 진입해주세요.
+                                </Text>
+                            </Card>
+                        )}
+                    </div>
 
-                            <div className="bg-green-500/10 text-green-800 p-3 rounded-md text-sm mt-3 space-y-2">
-                                <div className="flex gap-2 font-medium">
-                                    <CheckCircle2 className="w-4 h-4" /> 해결 가이드 (Resolution)
-                                </div>
-                                <p>
-                                    {pod.reason === 'InsufficientCPU'
-                                        ? 'Node Auto-scaler가 구성되어 있다면 자동으로 노드가 추가될 때까지 대기하세요. 임시 처리를 위해 중요도가 낮은 Job을 강제 종료할 수 있습니다.'
-                                        : 'ImagePullSecret이 올바르게 마운트되었는지 확인하고, 이미지 태그가 레지스트리에 존재하는지 검증하세요.'}
-                                </p>
-                            </div>
-                        </Card>
-                    ))}
+                    {/* RIGHT PANEL: Diagnostic Tabs */}
+                    <div className="flex-1 flex flex-col border border-border rounded-xl bg-card shadow-lg overflow-hidden">
+                        <TabGroup index={selectedTab} onIndexChange={setSelectedTab} className="flex flex-col h-full">
+                            <TabList variant="line" className="px-4 border-b border-border bg-muted/10 h-12 shrink-0">
+                                <Tab className="gap-2 h-full"><Share2 className="w-4 h-4" /> 리소스 관계</Tab>
+                                <Tab className="gap-2 h-full"><Activity className="w-4 h-4" /> 메트릭스</Tab>
+                                <Tab className="gap-2 h-full"><FileText className="w-4 h-4" /> 로그</Tab>
+                                <Tab className="gap-2 h-full"><History className="w-4 h-4" /> 이벤트</Tab>
+                            </TabList>
+
+                            <TabPanels className="flex-1 overflow-hidden p-6 relative">
+                                <TabPanel className="h-full">
+                                    <ResourceRelationshipTab podId={expandedPodId} />
+                                </TabPanel>
+
+                                <TabPanel className="h-full">
+                                    <MetricsTab containerId={expandedPodId || 'demo'} />
+                                </TabPanel>
+
+                                <TabPanel className="h-full">
+                                    {/* Advanced Log Search UI Mock */}
+                                    <div className="flex flex-col h-full gap-4">
+                                        <div className="flex gap-4 items-end bg-muted/30 p-4 rounded-lg border border-border shrink-0">
+                                            <div className="flex-1 space-y-2">
+                                                <label className="text-[10px] font-bold text-muted-foreground uppercase flex gap-2"><History className="w-3 h-3" /> 시간 선택</label>
+                                                <TextInput placeholder="2025/01/20 19:42 ~ 2025/01/21 19:42" defaultValue="2025/01/21 19:42 (최근 1일)" />
+                                            </div>
+                                            <div className="flex-1 space-y-2">
+                                                <label className="text-[10px] font-bold text-muted-foreground uppercase flex gap-2"><Filter className="w-3 h-3" /> 카테고리</label>
+                                                <Select defaultValue="stdout">
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue placeholder="카테고리 선택" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="stdout">containerStdout</SelectItem>
+                                                        <SelectItem value="app">AppLog</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <button onClick={() => alert('설정된 조건으로 로그 검색을 완료했습니다.')} className="h-10 px-6 bg-indigo-600 text-white rounded-lg font-bold">로그 검색</button>
+                                        </div>
+
+                                        <div className="flex-1 bg-[#1e1e1e] rounded-xl overflow-hidden font-mono text-[11px] p-4 flex flex-col border border-black shadow-2xl">
+                                            <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+                                                <div className="flex gap-4 text-white/50">
+                                                    <span className="flex items-center gap-2"><AlertCircle className="w-3 h-3" /> 태그 표시</span>
+                                                    <span className="flex items-center gap-2 font-bold text-indigo-400 underline underline-offset-4">로그 메뉴 이동 &gt;</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto space-y-2 text-indigo-100/80">
+                                                <div className="flex gap-4">
+                                                    <span className="text-white/30 shrink-0">2025-01-21 19:41:48.755</span>
+                                                    <span className="p-0.5 bg-indigo-500/20 rounded text-indigo-300">app</span>
+                                                    <p>redis-cluster <span className="bg-yellow-500/20 text-yellow-300">Warning</span> Back-off restarting failed container </p>
+                                                </div>
+                                                <div className="p-4 bg-indigo-900/20 rounded-lg border border-indigo-500/20 mt-2">
+                                                    <Grid numItems={2} className="gap-2">
+                                                        <Text className="text-[10px] text-white/40 italic">containername: redis</Text>
+                                                        <Text className="text-[10px] text-white/40 italic">pod: redis-cluster-2</Text>
+                                                        <Text className="text-[10px] text-white/40 italic">oid: -1154643286</Text>
+                                                        <Text className="text-[10px] text-white/40 italic">ns: backend</Text>
+                                                    </Grid>
+                                                    <p className="mt-3 text-white">2025-01-21T10:41:40.136 * Connecting to MASTER 10.21.11.169:6379</p>
+                                                </div>
+                                                {Array.from({ length: 5 }).map((_, i) => (
+                                                    <div key={i} className="flex gap-4 opacity-70 border-t border-white/5 pt-1">
+                                                        <span className="text-white/30 shrink-0">2025-01-21 19:41:48.755</span>
+                                                        <p>redis-cluster-2 stdout F 1:S 21 Jan 2025 10:41:40.136 * MASTER &lt;-&gt; REPLICA sync started</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </TabPanel>
+
+                                <TabPanel className="h-full">
+                                    <EventsTab />
+                                </TabPanel>
+                            </TabPanels>
+                        </TabGroup>
+                    </div>
                 </div>
-
             </div>
+
+            {/* Manifest Dialog */}
+            <Dialog open={isManifestOpen} onOpenChange={setIsManifestOpen}>
+                <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden bg-[#1e1e1e] border-indigo-500/30 text-indigo-100">
+                    <DialogHeader className="p-6 border-b border-indigo-500/20 shrink-0">
+                        <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
+                            <FileText className="w-5 h-5 text-indigo-400" /> {selectedPod?.name} Manifest
+                        </DialogTitle>
+                        <DialogDescription className="text-indigo-300/60">
+                            Kubernetes Object YAML 정의문
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-1 overflow-auto p-6 font-mono text-[13px] leading-relaxed relative">
+                        <button
+                            className="absolute top-4 right-6 p-2 hover:bg-white/10 rounded-md transition-colors text-indigo-300"
+                            onClick={() => {
+                                const yaml = `apiVersion: v1
+kind: Pod
+metadata:
+  name: ${selectedPod?.name}
+  namespace: ${selectedPod?.namespace}
+  labels:
+    app: ${selectedPod?.serviceName}
+spec:
+  containers:
+  - name: container-0
+    image: ${selectedPod?.image}
+    ports:
+    - containerPort: 80`;
+                                navigator.clipboard.writeText(yaml);
+                                alert('YAML이 클립보드에 복사되었습니다.');
+                            }}
+                        >
+                            Copy YAML
+                        </button>
+                        <pre className="text-indigo-200">
+                            {`apiVersion: v1
+kind: Pod
+metadata:
+  name: ${selectedPod?.name}
+  namespace: ${selectedPod?.namespace}
+  labels:
+    app: ${selectedPod?.serviceName}
+spec:
+  containers:
+  - name: container-0
+    image: ${selectedPod?.image}
+    ports:
+    - containerPort: 80
+    resources:
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+      requests:
+        cpu: "0.5"
+        memory: "512Mi"`}
+                        </pre>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </DashboardLayout>
     );
 }

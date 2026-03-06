@@ -4,7 +4,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ContainerData } from './ContainerBlock';
 import { MetricsTab } from './MetricsTab';
-import { Box, Activity, FileText, Settings, Webhook } from 'lucide-react';
+import { PodEventsTab } from './PodEventsTab';
+import { Box, Activity, FileText, Settings, Webhook, Maximize2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface ResourceDetailsSheetProps {
     container: ContainerData | null;
@@ -13,7 +15,13 @@ interface ResourceDetailsSheetProps {
 }
 
 export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDetailsSheetProps) {
+    const navigate = useNavigate();
     if (!container) return null;
+
+    const handleFullAnalysis = () => {
+        navigate(`/analysis?namespace=${container.namespace}&podName=${container.name}`);
+        onClose();
+    };
 
     return (
         <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -33,16 +41,22 @@ export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDet
                             </SheetDescription>
                         </div>
                     </div>
+                    <button
+                        onClick={handleFullAnalysis}
+                        className="ml-auto p-2 hover:bg-muted rounded-full transition-colors group flex items-center gap-2"
+                        title="상세 분석 (Full Analysis)"
+                    >
+                        <span className="text-xs font-semibold text-muted-foreground group-hover:text-primary transition-colors">상세 분석</span>
+                        <Maximize2 className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </button>
                 </SheetHeader>
 
                 <div className="flex-1 overflow-hidden p-6 relative">
                     <Tabs defaultValue="metrics" className="w-full h-full flex flex-col">
-                        <TabsList className="grid w-full grid-cols-5 h-12 bg-muted/50 rounded-lg p-1">
+                        <TabsList className="grid w-full grid-cols-3 h-12 bg-muted/50 rounded-lg p-1">
                             <TabsTrigger value="metrics" className="gap-2"><Activity className="w-4 h-4" /> Metrics</TabsTrigger>
                             <TabsTrigger value="logs" className="gap-2"><FileText className="w-4 h-4" /> Logs</TabsTrigger>
                             <TabsTrigger value="events" className="gap-2"><Settings className="w-4 h-4" /> Events</TabsTrigger>
-                            <TabsTrigger value="trace" className="gap-2" disabled={!container.hasTrace}><Webhook className="w-4 h-4" /> Trace (APM)</TabsTrigger>
-                            <TabsTrigger value="callinfo" className="gap-2"><Box className="w-4 h-4" /> Call Info</TabsTrigger>
                         </TabsList>
 
                         <div className="flex-1 mt-4 overflow-hidden relative">
@@ -76,8 +90,8 @@ export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDet
                                 </div>
                             </TabsContent>
 
-                            <TabsContent value="events" className="h-full m-0 p-0 flex items-center justify-center text-muted-foreground">
-                                Kubernetes Events Timeline Mock...
+                            <TabsContent value="events" className="h-full m-0 p-0">
+                                <PodEventsTab podName={container.name} />
                             </TabsContent>
                         </div>
                     </Tabs>
