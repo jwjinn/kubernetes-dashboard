@@ -135,14 +135,22 @@ const generateResourceMetrics = () => {
     const times = [];
     const cpu = [];
     const memory = [];
+    const networkRx = [];
+    const networkTx = [];
+    const diskRead = [];
+    const diskWrite = [];
     let baseTime = new Date().getTime() - 3600000;
     for (let i = 0; i < 60; i++) {
         times.push(new Date(baseTime).toLocaleTimeString());
         cpu.push(Math.floor(Math.random() * 100));
         memory.push(Math.floor(40 + Math.random() * 40));
+        networkRx.push(parseFloat((Math.random() * 10).toFixed(2))); // MB/s
+        networkTx.push(parseFloat((Math.random() * 5).toFixed(2)));  // MB/s
+        diskRead.push(parseFloat((Math.random() * 50).toFixed(2)));  // MB/s
+        diskWrite.push(parseFloat((Math.random() * 20).toFixed(2))); // MB/s
         baseTime += 60000;
     }
-    return { times, cpu, memory };
+    return { times, cpu, memory, networkRx, networkTx, diskRead, diskWrite };
 };
 
 // Generate Trend Data (Time-series)
