@@ -7,6 +7,7 @@ import WorkloadPage from '@/pages/WorkloadPage';
 import AnalysisPage from '@/pages/AnalysisPage';
 import AcceleratorDashboardPage from '@/pages/AcceleratorDashboardPage';
 import AcceleratorTrendPage from '@/pages/AcceleratorTrendPage';
+import KubeConsolePage from '@/pages/KubeConsolePage';
 import LogsPage from '@/pages/LogsPage';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -24,6 +25,7 @@ function App() {
           <Route path="/accelerator" element={<AcceleratorDashboardPage />} />
           <Route path="/accelerator-trend" element={<AcceleratorTrendPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
+          <Route path="/console" element={<KubeConsolePage />} />
           <Route path="/logs" element={<LogsPage />} />
         </Routes>
       </BrowserRouter>

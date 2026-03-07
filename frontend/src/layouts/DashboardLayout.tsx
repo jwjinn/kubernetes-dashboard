@@ -22,7 +22,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     ];
 
     const commonBottomItems = [
-        { name: '로그 (Logs)', href: '/logs', icon: Terminal },
+        { name: 'Kube Console', href: '/console', icon: Terminal },
+        { name: '로그 (Logs)', href: '/logs', icon: Activity }, // Changed icon to avoid duplicate
     ];
 
     const navItems = [
