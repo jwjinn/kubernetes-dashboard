@@ -174,7 +174,7 @@ export default function AnalysisPage() {
                                 <Tab className="gap-2 h-full"><History className="w-4 h-4" /> 이벤트</Tab>
                             </TabList>
 
-                            <div className="flex-1 overflow-hidden p-6 relative">
+                            <div className="flex-1 overflow-y-auto p-6 relative">
                                 {selectedTab === 0 && (
                                     <ResourceRelationshipTab podId={expandedPodId} />
                                 )}
