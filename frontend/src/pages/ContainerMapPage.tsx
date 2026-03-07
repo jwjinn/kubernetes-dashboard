@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ResourceDetailsSheet } from '@/features/kubernetes/components/ResourceDetailsSheet';
 import { Cpu, Zap, Search, Info } from 'lucide-react';
 import { Input } from "@/components/ui/input";
+import { getEnv } from '@/config/env';
 
 export default function ContainerMapPage() {
     const [groupBy, setGroupBy] = useState<'node' | 'namespace'>('node');
@@ -15,7 +16,7 @@ export default function ContainerMapPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [hoveredPodId, setHoveredPodId] = useState<string | null>(null);
 
-    const acceleratorMode = import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU';
+    const acceleratorMode = getEnv('VITE_ACCELERATOR_TYPE', 'GPU');
 
     const { data: containers = [], isLoading } = useQuery<ContainerData[]>({
         queryKey: ['containerMap'],

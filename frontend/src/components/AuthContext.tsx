@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { getEnv } from '@/config/env';
 
 interface AuthContextType {
     isAuthenticated: boolean;
@@ -11,7 +12,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // In a real application, you might want this to be configurable via env
-// const useSecureCookies = import.meta.env.VITE_SECURE_AUTH === 'true';
+// const useSecureCookies = getEnv('VITE_SECURE_AUTH') === 'true';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Initialize token from localStorage if available
