@@ -32,6 +32,12 @@ export const fetchTopologyData = async (clusterId: string, nodeId?: string | nul
     return response.json();
 };
 
+export const fetchWorkloadTopology = async (): Promise<{ nodes: any[]; edges: any[] }> => {
+    const response = await apiFetch('/api/workload-topology');
+    if (!response.ok) throw new Error('Failed to fetch workload topology');
+    return response.json();
+};
+
 export const terminatePod = async (podId: string) => {
     const response = await apiFetch(`/api/pods/${podId}/terminate`, { method: 'POST' });
     if (!response.ok) throw new Error('Failed to terminate pod');

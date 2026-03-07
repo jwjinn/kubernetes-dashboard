@@ -1,10 +1,11 @@
 import { defineConfig, loadEnv } from 'vite'
+import type { UserConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from "path"
 import mkcert from 'vite-plugin-mkcert'
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode }): UserConfig => {
   // Load env file based on `mode` in the current working directory.
   // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), '');
@@ -12,11 +13,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     server: {
-      https: useHttps,
+      https: (useHttps ? true : undefined) as any,
     },
     plugins: [
       react(),
-      ...(useHttps ? [mkcert()] : [])
+      ...(useHttps ? [mkcert() as any] : [])
     ],
     build: {
       minify: false,
