@@ -1,17 +1,19 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useFilterStore } from '@/store/filterStore';
-import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3, Terminal } from 'lucide-react';
+import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3, Terminal, Server } from 'lucide-react';
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+    const location = useLocation();
     const { selectedCluster, setCluster } = useFilterStore();
     const acceleratorMode = import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU';
 
     const baseNavItems = [
         { name: 'Cluster Overview', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Node Dashboard', href: '/cluster-dashboard', icon: Server },
         { name: 'Container Map', href: '/containers', icon: Box },
         { name: '장애 진단 (Diagnosis)', href: '/workloads', icon: Activity },
     ];

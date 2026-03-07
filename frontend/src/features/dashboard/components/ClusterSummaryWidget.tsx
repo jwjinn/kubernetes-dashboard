@@ -3,6 +3,8 @@ import { Card, Text, Metric, Flex, ProgressBar, BadgeDelta, Grid } from '@tremor
 import { useQuery } from '@tanstack/react-query';
 import { fetchClusterSummary } from '@/api';
 import { useFilterStore } from '@/store/filterStore';
+import { Link } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 
 export function ClusterSummaryWidget() {
     const { selectedCluster } = useFilterStore();
@@ -25,10 +27,13 @@ export function ClusterSummaryWidget() {
     return (
         <Grid numItemsSm={1} numItemsLg={3} className="gap-6">
             {/* GPU Allocation Card */}
-            <Card decoration="top" decorationColor="indigo">
+            <Card decoration="top" decorationColor="indigo" className="relative group hover:shadow-md transition-all cursor-pointer">
+                <Link to="/cluster-dashboard" className="absolute inset-0 z-10" />
                 <Flex alignItems="start">
                     <div>
-                        <Text>GPU Allocation</Text>
+                        <Text className="flex items-center gap-1 group-hover:text-primary transition-colors">
+                            GPU Allocation <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-all" />
+                        </Text>
                         <Metric>{data.usedGpu} / {data.totalGpu}</Metric>
                     </div>
                     <BadgeDelta deltaType={gpuUsagePercent > 90 ? 'moderateDecrease' : 'moderateIncrease'}>
@@ -43,10 +48,13 @@ export function ClusterSummaryWidget() {
             </Card>
 
             {/* Idle GPUs Card */}
-            <Card decoration="top" decorationColor={data.idleGpu > 0 ? "emerald" : "red"}>
+            <Card decoration="top" decorationColor={data.idleGpu > 0 ? "emerald" : "red"} className="relative group hover:shadow-md transition-all cursor-pointer">
+                <Link to="/cluster-dashboard" className="absolute inset-0 z-10" />
                 <Flex alignItems="start">
                     <div>
-                        <Text>Idle GPUs</Text>
+                        <Text className="flex items-center gap-1 group-hover:text-primary transition-colors">
+                            Idle GPUs <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-all" />
+                        </Text>
                         <Metric>{data.idleGpu}</Metric>
                     </div>
                 </Flex>
@@ -54,10 +62,13 @@ export function ClusterSummaryWidget() {
             </Card>
 
             {/* Cluster Temperature Card */}
-            <Card decoration="top" decorationColor={data.temperature > 85 ? "red" : "amber"}>
+            <Card decoration="top" decorationColor={data.temperature > 85 ? "red" : "amber"} className="relative group hover:shadow-md transition-all cursor-pointer">
+                <Link to="/cluster-dashboard" className="absolute inset-0 z-10" />
                 <Flex alignItems="start">
                     <div>
-                        <Text>Avg Temperature</Text>
+                        <Text className="flex items-center gap-1 group-hover:text-primary transition-colors">
+                            Avg Temperature <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-all" />
+                        </Text>
                         <Metric>{data.temperature}°C</Metric>
                     </div>
                     <BadgeDelta deltaType={data.temperature > 85 ? 'decrease' : 'unchanged'}>

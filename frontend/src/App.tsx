@@ -9,6 +9,7 @@ import AcceleratorDashboardPage from '@/pages/AcceleratorDashboardPage';
 import AcceleratorTrendPage from '@/pages/AcceleratorTrendPage';
 import KubeConsolePage from '@/pages/KubeConsolePage';
 import LogsPage from '@/pages/LogsPage';
+import ClusterDashboardPage from '@/pages/ClusterDashboardPage';
 import { Toaster } from '@/components/ui/toaster';
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/cluster-dashboard" element={<ClusterDashboardPage />} />
           <Route path="/containers" element={<ContainerMapPage />} />
           <Route path="/workloads" element={<WorkloadPage />} />
           <Route path="/accelerator" element={<AcceleratorDashboardPage />} />
