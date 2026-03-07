@@ -1,5 +1,25 @@
+const getAuthToken = () => localStorage.getItem('k8s_dashboard_token');
+
+const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const token = getAuthToken();
+    const headers = new Headers(init?.headers);
+    if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    const response = await fetch(input, { ...init, headers });
+
+    if (response.status === 401) {
+        // Optional: Handle unauthorized globally (e.g., clear token, redirect to login)
+        // localStorage.removeItem('k8s_dashboard_token');
+        // window.location.href = '/login';
+    }
+
+    return response;
+};
+
 export const fetchClusterSummary = async (clusterId: string) => {
-    const response = await fetch(`/api/clusters/summary?cluster=${clusterId}`);
+    const response = await apiFetch(`/api/clusters/summary?cluster=${clusterId}`);
     if (!response.ok) throw new Error('Failed to fetch cluster summary');
     return response.json();
 };
@@ -7,13 +27,13 @@ export const fetchClusterSummary = async (clusterId: string) => {
 export const fetchTopologyData = async (clusterId: string, nodeId?: string | null) => {
     let url = `/api/topology?cluster=${clusterId}`;
     if (nodeId) url += `&nodeId=${nodeId}`;
-    const response = await fetch(url);
+    const response = await apiFetch(url);
     if (!response.ok) throw new Error('Failed to fetch topology data');
     return response.json();
 };
 
 export const terminatePod = async (podId: string) => {
-    const response = await fetch(`/api/pods/${podId}/terminate`, { method: 'POST' });
+    const response = await apiFetch(`/api/pods/${podId}/terminate`, { method: 'POST' });
     if (!response.ok) throw new Error('Failed to terminate pod');
     return response.json();
 };
@@ -33,63 +53,63 @@ export interface NpuDevice {
 }
 
 export const fetchContainerMap = async () => {
-    const response = await fetch(`/api/k8s/containers`);
+    const response = await apiFetch(`/api/k8s/containers`);
     if (!response.ok) throw new Error('Failed to fetch container map');
     return response.json();
 };
 
 export const fetchContainerMetrics = async (containerId: string) => {
-    const response = await fetch(`/api/k8s/metrics/${containerId}`);
+    const response = await apiFetch(`/api/k8s/metrics/${containerId}`);
     if (!response.ok) throw new Error('Failed to fetch container metrics');
     return response.json();
 };
 
 export const fetchGpuDevices = async () => {
-    const response = await fetch(`/api/gpu/devices`);
+    const response = await apiFetch(`/api/gpu/devices`);
     if (!response.ok) throw new Error('Failed to fetch gpu devices');
     return response.json();
 };
 
 export const fetchGpuTrends = async () => {
-    const response = await fetch(`/api/gpu/trends`);
+    const response = await apiFetch(`/api/gpu/trends`);
     if (!response.ok) throw new Error('Failed to fetch gpu trends');
     return response.json();
 };
 
 export const fetchNpuDevices = async () => {
-    const response = await fetch(`/api/npu/devices`);
+    const response = await apiFetch(`/api/npu/devices`);
     if (!response.ok) throw new Error('Failed to fetch npu devices');
     return response.json();
 };
 
 export const fetchNpuTrends = async () => {
-    const response = await fetch(`/api/npu/trends`);
+    const response = await apiFetch(`/api/npu/trends`);
     if (!response.ok) throw new Error('Failed to fetch npu trends');
     return response.json();
 };
 
 export const fetchAcceleratorDevices = async (type: 'GPU' | 'NPU' = 'GPU') => {
     const endpoint = type === 'NPU' ? '/api/npu/devices' : '/api/gpu/devices';
-    const response = await fetch(endpoint);
+    const response = await apiFetch(endpoint);
     if (!response.ok) throw new Error(`Failed to fetch ${type.toLowerCase()} devices`);
     return response.json();
 };
 
 export const fetchAcceleratorTrends = async (type: 'GPU' | 'NPU' = 'GPU') => {
     const endpoint = type === 'NPU' ? '/api/npu/trends' : '/api/gpu/trends';
-    const response = await fetch(endpoint);
+    const response = await apiFetch(endpoint);
     if (!response.ok) throw new Error(`Failed to fetch ${type.toLowerCase()} trends`);
     return response.json();
 };
 
 export const fetchK8sEvents = async () => {
-    const response = await fetch('/api/k8s/events');
+    const response = await apiFetch('/api/k8s/events');
     if (!response.ok) throw new Error('Failed to fetch events');
     return response.json();
 };
 
 export const fetchStartupAnalysis = async () => {
-    const response = await fetch('/api/k8s/startup-analysis');
+    const response = await apiFetch('/api/k8s/startup-analysis');
     if (!response.ok) throw new Error('Failed to fetch startup analysis');
     return response.json();
 };
@@ -100,7 +120,7 @@ export const fetchLogs = async (podName?: string, level?: string, search?: strin
     if (level) url += `level=${level}&`;
     if (search) url += `search=${search}&`;
 
-    const response = await fetch(url);
+    const response = await apiFetch(url);
     if (!response.ok) throw new Error('Failed to fetch logs');
     return response.json();
 };

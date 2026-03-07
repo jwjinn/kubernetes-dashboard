@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useFilterStore } from '@/store/filterStore';
-import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3, Terminal, Server } from 'lucide-react';
+import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3, Terminal, Server, LogOut } from 'lucide-react';
+import { useAuth } from '@/components/AuthContext';
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
@@ -9,6 +10,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
     const location = useLocation();
     const { selectedCluster, setCluster } = useFilterStore();
+    const { logout } = useAuth();
     const acceleratorMode = import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU';
 
     const baseNavItems = [
@@ -86,8 +88,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             <Bell className="w-5 h-5" />
                             <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full"></span>
                         </button>
-                        <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold cursor-pointer">
-                            <User className="w-5 h-5" />
+                        <div className="flex items-center gap-2 pl-2 border-l border-border">
+                            <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold cursor-pointer hover:bg-indigo-600 transition-colors">
+                                <User className="w-5 h-5" />
+                            </div>
+                            <button
+                                onClick={logout}
+                                className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-full transition-colors"
+                                title="Logout"
+                            >
+                                <LogOut className="w-5 h-5" />
+                            </button>
                         </div>
                     </div>
                 </header>

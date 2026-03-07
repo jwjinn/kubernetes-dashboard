@@ -10,29 +10,35 @@ import AcceleratorTrendPage from '@/pages/AcceleratorTrendPage';
 import KubeConsolePage from '@/pages/KubeConsolePage';
 import LogsPage from '@/pages/LogsPage';
 import ClusterDashboardPage from '@/pages/ClusterDashboardPage';
+import LoginPage from '@/pages/LoginPage';
 import { Toaster } from '@/components/ui/toaster';
+import { AuthProvider } from '@/components/AuthContext';
+import { PrivateRoute } from '@/components/PrivateRoute';
 
 const queryClient = new QueryClient();
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/cluster-dashboard" element={<ClusterDashboardPage />} />
-          <Route path="/containers" element={<ContainerMapPage />} />
-          <Route path="/workloads" element={<WorkloadPage />} />
-          <Route path="/accelerator" element={<AcceleratorDashboardPage />} />
-          <Route path="/accelerator-trend" element={<AcceleratorTrendPage />} />
-          <Route path="/analysis" element={<AnalysisPage />} />
-          <Route path="/console" element={<KubeConsolePage />} />
-          <Route path="/logs" element={<LogsPage />} />
-        </Routes>
-      </BrowserRouter>
-      {/* Toast provider from shadcn/ui */}
-      <Toaster />
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+            <Route path="/cluster-dashboard" element={<PrivateRoute><ClusterDashboardPage /></PrivateRoute>} />
+            <Route path="/containers" element={<PrivateRoute><ContainerMapPage /></PrivateRoute>} />
+            <Route path="/workloads" element={<PrivateRoute><WorkloadPage /></PrivateRoute>} />
+            <Route path="/accelerator" element={<PrivateRoute><AcceleratorDashboardPage /></PrivateRoute>} />
+            <Route path="/accelerator-trend" element={<PrivateRoute><AcceleratorTrendPage /></PrivateRoute>} />
+            <Route path="/analysis" element={<PrivateRoute><AnalysisPage /></PrivateRoute>} />
+            <Route path="/console" element={<PrivateRoute><KubeConsolePage /></PrivateRoute>} />
+            <Route path="/logs" element={<PrivateRoute><LogsPage /></PrivateRoute>} />
+          </Routes>
+        </BrowserRouter>
+        {/* Toast provider from shadcn/ui */}
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
