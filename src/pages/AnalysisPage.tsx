@@ -174,16 +174,16 @@ export default function AnalysisPage() {
                                 <Tab className="gap-2 h-full"><History className="w-4 h-4" /> 이벤트</Tab>
                             </TabList>
 
-                            <TabPanels className="flex-1 overflow-hidden p-6 relative">
-                                <TabPanel className="h-full">
+                            <div className="flex-1 overflow-hidden p-6 relative">
+                                {selectedTab === 0 && (
                                     <ResourceRelationshipTab podId={expandedPodId} />
-                                </TabPanel>
+                                )}
 
-                                <TabPanel className="h-full">
+                                {selectedTab === 1 && (
                                     <MetricsTab containerId={expandedPodId || 'demo'} />
-                                </TabPanel>
+                                )}
 
-                                <TabPanel className="h-full">
+                                {selectedTab === 2 && (
                                     <div className="h-full flex flex-col">
                                         {selectedPod ? (
                                             <LogViewer podName={selectedPod.name} height="h-full" />
@@ -193,12 +193,12 @@ export default function AnalysisPage() {
                                             </div>
                                         )}
                                     </div>
-                                </TabPanel>
+                                )}
 
-                                <TabPanel className="h-full">
+                                {selectedTab === 3 && (
                                     <EventsTab />
-                                </TabPanel>
-                            </TabPanels>
+                                )}
+                            </div>
                         </TabGroup>
                     </div>
                 </div>

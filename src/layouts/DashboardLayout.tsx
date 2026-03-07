@@ -16,14 +16,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         { name: '장애 진단 (Diagnosis)', href: '/workloads', icon: Activity },
     ];
 
-    const gpuNavItems = [
-        { name: 'GPU Dashboard', href: '/gpu', icon: Cpu },
-        { name: 'GPU Trends (통계)', href: '/gpu-trend', icon: BarChart3 },
-    ];
-
-    const npuNavItems = [
-        { name: 'NPU Dashboard', href: '/npu', icon: Cpu },
-        { name: 'NPU Trends (통계)', href: '/npu-trend', icon: BarChart3 },
+    const acceleratorNavItems = [
+        { name: `${acceleratorMode} Dashboard`, href: '/accelerator', icon: Cpu },
+        { name: `${acceleratorMode} Trends (통계)`, href: '/accelerator-trend', icon: BarChart3 },
     ];
 
     const commonBottomItems = [
@@ -32,7 +27,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const navItems = [
         ...baseNavItems,
-        ...(acceleratorMode === 'NPU' ? npuNavItems : gpuNavItems),
+        ...acceleratorNavItems,
         ...commonBottomItems
     ];
 

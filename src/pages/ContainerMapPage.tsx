@@ -15,6 +15,8 @@ export default function ContainerMapPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [hoveredPodId, setHoveredPodId] = useState<string | null>(null);
 
+    const acceleratorMode = import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU';
+
     const { data: containers = [], isLoading } = useQuery<ContainerData[]>({
         queryKey: ['containerMap'],
         queryFn: fetchContainerMap,
@@ -65,7 +67,7 @@ export default function ContainerMapPage() {
                                     <ul className="list-disc ml-4 space-y-1">
                                         <li>각 블록은 하나의 **컨테이너/파드**를 나타냅니다.</li>
                                         <li>**색상**: 리소스 사용량 및 상태 (초록:정상, 노랑:경고, 빨강:장애)</li>
-                                        <li>**아이콘**: <Zap className="inline w-3 h-3" /> GPU 사용, <Cpu className="inline w-3 h-3" /> CPU 전용</li>
+                                        <li>**아이콘**: <Zap className="inline w-3 h-3" /> {acceleratorMode} 사용, <Cpu className="inline w-3 h-3" /> CPU 전용</li>
                                         <li>**하이라이트**: 블록에 마우스를 올리면 해당 파드만 강조됩니다.</li>
                                     </ul>
                                 </div>
@@ -76,8 +78,8 @@ export default function ContainerMapPage() {
                         </p>
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px]">
                             <div className="flex items-center gap-1.5">
-                                <div className="w-3 h-3 rounded-sm bg-indigo-500"></div>
-                                <span className="text-muted-foreground">GPU (Usage Base)</span>
+                                <div className={`w-3 h-3 rounded-sm ${acceleratorMode === 'NPU' ? 'bg-green-500' : 'bg-indigo-500'}`}></div>
+                                <span className="text-muted-foreground">{acceleratorMode} (Usage Base)</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded-sm bg-emerald-500"></div>
@@ -96,7 +98,7 @@ export default function ContainerMapPage() {
 
                             <div className="flex items-center gap-1.5">
                                 <Zap className="w-3 h-3 text-yellow-500" fill="currentColor" />
-                                <span className="text-muted-foreground">GPU Chip</span>
+                                <span className="text-muted-foreground">{acceleratorMode} Chip</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <Cpu className="w-3 h-3 text-muted-foreground" />

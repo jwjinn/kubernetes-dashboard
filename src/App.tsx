@@ -5,10 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ContainerMapPage from '@/pages/ContainerMapPage';
 import WorkloadPage from '@/pages/WorkloadPage';
 import AnalysisPage from '@/pages/AnalysisPage';
-import GpuDashboardPage from '@/pages/GpuDashboardPage';
-import GpuTrendPage from '@/pages/GpuTrendPage';
-import NpuDashboardPage from '@/pages/NpuDashboardPage';
-import NpuTrendPage from '@/pages/NpuTrendPage';
+import AcceleratorDashboardPage from '@/pages/AcceleratorDashboardPage';
+import AcceleratorTrendPage from '@/pages/AcceleratorTrendPage';
 import LogsPage from '@/pages/LogsPage';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -23,10 +21,8 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/containers" element={<ContainerMapPage />} />
           <Route path="/workloads" element={<WorkloadPage />} />
-          <Route path="/gpu" element={<GpuDashboardPage />} />
-          <Route path="/gpu-trend" element={<GpuTrendPage />} />
-          <Route path="/npu" element={<NpuDashboardPage />} />
-          <Route path="/npu-trend" element={<NpuTrendPage />} />
+          <Route path="/accelerator" element={<AcceleratorDashboardPage />} />
+          <Route path="/accelerator-trend" element={<AcceleratorTrendPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
           <Route path="/logs" element={<LogsPage />} />
         </Routes>

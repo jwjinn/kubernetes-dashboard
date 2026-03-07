@@ -68,6 +68,20 @@ export const fetchNpuTrends = async () => {
     return response.json();
 };
 
+export const fetchAcceleratorDevices = async (type: 'GPU' | 'NPU' = 'GPU') => {
+    const endpoint = type === 'NPU' ? '/api/npu/devices' : '/api/gpu/devices';
+    const response = await fetch(endpoint);
+    if (!response.ok) throw new Error(`Failed to fetch ${type.toLowerCase()} devices`);
+    return response.json();
+};
+
+export const fetchAcceleratorTrends = async (type: 'GPU' | 'NPU' = 'GPU') => {
+    const endpoint = type === 'NPU' ? '/api/npu/trends' : '/api/gpu/trends';
+    const response = await fetch(endpoint);
+    if (!response.ok) throw new Error(`Failed to fetch ${type.toLowerCase()} trends`);
+    return response.json();
+};
+
 export const fetchK8sEvents = async () => {
     const response = await fetch('/api/k8s/events');
     if (!response.ok) throw new Error('Failed to fetch events');
@@ -77,5 +91,16 @@ export const fetchK8sEvents = async () => {
 export const fetchStartupAnalysis = async () => {
     const response = await fetch('/api/k8s/startup-analysis');
     if (!response.ok) throw new Error('Failed to fetch startup analysis');
+    return response.json();
+};
+
+export const fetchLogs = async (podName?: string, level?: string, search?: string) => {
+    let url = `/api/logs?`;
+    if (podName) url += `pod=${podName}&`;
+    if (level) url += `level=${level}&`;
+    if (search) url += `search=${search}&`;
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch logs');
     return response.json();
 };
