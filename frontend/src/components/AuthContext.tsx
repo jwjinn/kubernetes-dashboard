@@ -1,29 +1,25 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { getEnv } from '@/config/env';
+import { useAuth as useOidcAuth } from 'react-oidc-context';
 
 interface AuthContextType {
     isAuthenticated: boolean;
     token: string | null;
-    login: (token: string) => void;
+    login: () => void;
     logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// In a real application, you might want this to be configurable via env
-// const useSecureCookies = getEnv('VITE_SECURE_AUTH') === 'true';
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    // Initialize token from localStorage if available
-    const [token, setToken] = useState<string | null>(() => {
-        return localStorage.getItem('k8s_dashboard_token');
-    });
+    const auth = useOidcAuth();
 
-    const isAuthenticated = !!token;
+    // Map OIDC state to our existing AuthContext interface
+    const isAuthenticated = auth.isAuthenticated;
+    const token = auth.user?.access_token || null;
 
-    // Persist token changes
     useEffect(() => {
+        // Automatically save token for easy testing if needed
         if (token) {
             localStorage.setItem('k8s_dashboard_token', token);
         } else {
@@ -31,13 +27,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [token]);
 
-    const login = (newToken: string) => {
-        setToken(newToken);
+    const login = () => {
+        auth.signinRedirect();
     };
 
     const logout = () => {
-        setToken(null);
+        auth.signoutRedirect();
     };
+
+    // If OIDC is still initializing/verifying from redirect, we might want to show a loader,
+    // but for now we just pass down the state. PrivateRoute will handle redirects.
+    if (auth.isLoading) {
+        return <div>Loading authentication...</div>;
+    }
+
+    if (auth.error) {
+        return <div>Auth Error: {auth.error.message}</div>;
+    }
 
     return (
         <AuthContext.Provider value={{ isAuthenticated, token, login, logout }}>

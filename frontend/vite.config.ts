@@ -14,6 +14,12 @@ export default defineConfig(({ mode }): UserConfig => {
   return {
     server: {
       https: (useHttps ? true : undefined) as any,
+      proxy: {
+        '/api/data': {
+          target: 'http://localhost:8081',
+          changeOrigin: true,
+        }
+      }
     },
     plugins: [
       react(),
