@@ -3,3 +3,10 @@ backend/node_modules/
 dist/
 *.log
 node_modules/
+temp-theme.jar
+temp-theme/
+.env
+.idea/
+.vscode/
+*.jar
+*.tmp
