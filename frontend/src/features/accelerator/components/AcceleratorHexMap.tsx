@@ -116,7 +116,7 @@ export function AcceleratorHexMap({
                                             marginTop: '-0.75rem',
                                         } : {})}
                                     >
-                                        {isNpu ? device.id.split('-').pop() : (device.type || 'P')}
+                                        {isNpu ? device.id.replace('die', '') : (device.type || 'P')}
                                     </div>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="p-3 bg-background/95 backdrop-blur border border-border shadow-xl z-50">
@@ -171,7 +171,9 @@ export function AcceleratorHexMap({
                                 {nodeName}
                             </h4>
                         ) : <div />}
-                        <Badge variant="outline" className="text-[10px] py-0">{devices.length} UNITS</Badge>
+                        <Badge variant="outline" className="text-[10px] py-0 uppercase">
+                            {devices.length} {isNpu ? 'Dies' : 'Units'}
+                        </Badge>
                     </div>
                     {renderHexGrid(devices)}
                 </div>

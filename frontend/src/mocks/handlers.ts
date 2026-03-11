@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 
 // --- CENTRALIZED CLUSTER STATE ---
-const CLUSTER_NODES = ['node-0', 'node-1', 'node-2', 'node-3'];
+const CLUSTER_NODES = ['worker-01', 'worker-02'];
 const NAMESPACES = ['kube-system', 'prod-backend', 'ai-training'];
 
 // GPU Device Definition
@@ -90,19 +90,38 @@ const generateInitialNpuDevices = (): NpuDevice[] => {
     const namespaces = ['-', 'npu-infer', 'default', 'ai-vision'];
     const pods = ['-', 'atom-worker-v1', 'rebellion-model-serving', 'npu-stream-proc'];
 
-    for (let i = 0; i < 8; i++) {
-        const node = CLUSTER_NODES[Math.floor(i / 2)];
-        const isActive = Math.random() > 0.4;
+    // 2 nodes * 8 Dies = 16 devices total
+    for (let i = 0; i < 16; i++) {
+        const nodeIdx = Math.floor(i / 8);
+        const dieIdx = i % 8;
+        const node = CLUSTER_NODES[nodeIdx];
+        
+        let isActive = Math.random() > 0.4;
+        let utilization = isActive ? Math.floor(10 + Math.random() * 90) : 0;
+
+        // Specific pattern for worker-02 as requested by user
+        // Scenario: 0, 1, 3 are idle (grey), 2, 4, 5, 6, 7 are active (green)
+        if (node === 'worker-02') {
+            if ([0, 1, 3].includes(dieIdx)) {
+                isActive = false;
+                utilization = 0;
+            } else {
+                isActive = true;
+                // Assign some specific high utilization for "showing usage"
+                utilization = 60 + (dieIdx * 5); 
+            }
+        }
+
         const podName = isActive ? pods[Math.floor(Math.random() * (pods.length - 1)) + 1] : '-';
         const nsName = podName !== '-' ? namespaces[Math.floor(Math.random() * (namespaces.length - 1)) + 1] : '-';
 
         devices.push({
-            id: `npu${i % 2}`,
+            id: `die${dieIdx}`,
             node: node,
             model: model,
             status: isActive ? 'Active' : 'Idle',
-            utilization: isActive ? Math.floor(10 + Math.random() * 90) : 0,
-            uuid: `NPU-${Math.random().toString(36).substring(2, 10)}-${i}`,
+            utilization: utilization,
+            uuid: `NPU-DIE-${Math.random().toString(36).substring(2, 10)}-${i}`,
             namespace: nsName,
             pod: podName !== '-' ? `${podName}-${Math.floor(Math.random() * 10000)}` : '-',
             vramUsage: isActive ? `${Math.floor(2 + Math.random() * 14)} GiB` : '0 GiB',
@@ -123,7 +142,7 @@ const STATIC_NPU_CLUSTER_OVERVIEW = {
     ],
     nodeAllocation: [
         { node: 'worker-01', allocated: 5, capacity: 8 },
-        { node: 'worker-02', allocated: 8, capacity: 8 },
+        { node: 'worker-02', allocated: 5, capacity: 8 },
     ]
 };
 
