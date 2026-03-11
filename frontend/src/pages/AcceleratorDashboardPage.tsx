@@ -4,11 +4,15 @@ import ReactECharts from 'echarts-for-react';
 import { AcceleratorHexMap } from '@/features/accelerator/components/AcceleratorHexMap';
 import { AcceleratorDetailsSheet } from '@/features/accelerator/components/AcceleratorDetailsSheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAcceleratorDevices } from '@/api';
 import type { AcceleratorDevice } from '@/features/accelerator/components/AcceleratorHexMap';
 import { Search } from 'lucide-react';
+import { ClusterOverviewView } from '@/features/accelerator/components/ClusterOverviewView';
+import { HardwareDetailsView } from '@/features/accelerator/components/HardwareDetailsView';
+import { WorkloadMappingView } from '@/features/accelerator/components/WorkloadMappingView';
 
 export default function AcceleratorDashboardPage() {
     const acceleratorMode = (import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU') as 'GPU' | 'NPU';
@@ -18,12 +22,41 @@ export default function AcceleratorDashboardPage() {
     const [selectedMapNode, setSelectedMapNode] = useState<string | null>(null);
     const [groupBy, setGroupBy] = useState<'None' | 'Node'>('Node');
     const [colorBy, setColorBy] = useState<'Status' | 'Utilization'>('Utilization');
+    const [activeTab, setActiveTab] = useState('overview');
 
     const { data: devices = [], isLoading } = useQuery<AcceleratorDevice[]>({
         queryKey: ['acceleratorDevices', acceleratorMode],
         queryFn: () => fetchAcceleratorDevices(acceleratorMode),
         refetchInterval: 5000
     });
+
+    const summaryStats = useMemo(() => {
+        const totalNodes = new Set(devices.map(d => d.node)).size;
+        const totalDevices = devices.length;
+        const activeDevices = devices.filter(d => d.status === 'Active').length;
+        const idleDevices = totalDevices - activeDevices;
+
+        let activeMig = 0;
+        let idleMig = 0;
+
+        if (!isNpu) {
+            devices.forEach(d => {
+                if (d.type === 'M') {
+                    if (d.status === 'Active') activeMig++;
+                    else idleMig++;
+                }
+            });
+        }
+
+        return {
+            totalNodes,
+            totalDevices,
+            activeDevices,
+            idleDevices,
+            activeMig,
+            idleMig
+        };
+    }, [devices, isNpu]);
 
     const { utilData, tempData, vramData, smData } = useMemo(() => {
         const timeAxis = ['17:00', '17:10', '17:20', '17:30', '17:40', '17:50', '18:00', '18:10', '18:20', '18:30'];
@@ -99,309 +132,280 @@ export default function AcceleratorDashboardPage() {
         };
     }, [selectedMapNode, isNpu]);
 
-    const summaryStats = useMemo(() => {
-        const stats = {
-            totalNodes: new Set(devices.map(d => d.node)).size,
-            physicalTotal: 0,
-            physicalActive: 0,
-            migTotal: 0,
-            migActive: 0,
-            migIdle: 0
-        };
-
-        devices.forEach(device => {
-            if (!device.type || device.type === 'P') {
-                stats.physicalTotal++;
-                if (device.status === 'Active') stats.physicalActive++;
-            } else if (device.type === 'M') {
-                stats.migTotal++;
-                if (device.status === 'Active') stats.migActive++;
-                if (device.status === 'Idle') stats.migIdle++;
-            }
-        });
-
-        return stats;
-    }, [devices]);
-
-    const primaryColorClass = isNpu ? 'text-green-500' : 'text-blue-500';
-    const primaryBgClass = isNpu ? 'bg-green-500' : 'bg-blue-500';
-    const primaryTitle = isNpu ? 'NPU' : 'GPU';
-
     return (
         <DashboardLayout>
-            <div className="space-y-6 animate-in fade-in duration-500">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">{primaryTitle} 대시보드</h2>
-                    <p className="text-muted-foreground text-sm mt-1">
-                        노드-{primaryTitle}({isNpu ? 'Core' : 'MIG'})-Pod간의 연결 관계를 추적하고, 리소스 과다/편중 사용 및 미사용 {primaryTitle} 등 이상 징후를 한눈에 파악합니다.
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card className="p-4 border-border shadow-sm flex flex-col justify-between">
-                        <Text className="font-bold text-foreground mb-4">{primaryTitle} Node</Text>
-                        <div className="flex justify-between items-end px-2">
-                            <div className="flex flex-col items-center">
-                                <Text className="text-xs font-bold text-muted-foreground uppercase mb-1">Total</Text>
-                                <Metric className="text-4xl font-black text-foreground">{summaryStats.totalNodes}</Metric>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <Text className={`flex items-center gap-1.5 text-xs font-bold ${primaryColorClass} uppercase mb-1`}>
-                                    <div className={`w-2.5 h-2.5 ${primaryBgClass} rounded-sm`}></div> Ready
-                                </Text>
-                                <Metric className={`text-4xl font-black ${primaryColorClass}`}>{summaryStats.totalNodes}</Metric>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card className="p-4 border-border shadow-sm flex flex-col justify-between">
-                        <Text className="font-bold text-foreground mb-4">Pod</Text>
-                        <div className="flex justify-between items-end px-2">
-                            <div className="flex flex-col items-center">
-                                <Text className="text-xs font-bold text-muted-foreground uppercase mb-1">Total</Text>
-                                <Metric className="text-4xl font-black text-foreground">{summaryStats.physicalActive + summaryStats.migActive + 14}</Metric>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <Text className={`flex items-center gap-1.5 text-[11px] font-bold ${primaryColorClass} uppercase mb-1 whitespace-nowrap`}>
-                                    <div className={`w-2.5 h-2.5 ${primaryBgClass} rounded-[3px]`}></div> {primaryTitle} 사용 중
-                                </Text>
-                                <Metric className={`text-4xl font-black ${primaryColorClass}`}>{summaryStats.physicalActive + summaryStats.migActive}</Metric>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <Text className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 uppercase mb-1 whitespace-nowrap">
-                                    <div className="w-2.5 h-2.5 bg-gray-300 rounded-[3px]"></div> CPU 전용
-                                </Text>
-                                <Metric className="text-4xl font-black text-gray-400">14</Metric>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card className="p-4 border-border shadow-sm flex flex-col justify-between">
-                        <Text className="font-bold text-foreground mb-4">Device</Text>
-                        <div className="flex justify-between items-end px-12">
-                            <div className="flex flex-col items-center">
-                                <Text className="text-xs font-bold text-muted-foreground uppercase mb-1">Total</Text>
-                                <Metric className="text-4xl font-black text-foreground">{summaryStats.physicalTotal}</Metric>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <Text className={`flex items-center gap-1.5 text-xs font-bold ${primaryColorClass} uppercase mb-1`}>
-                                    <div className={`w-2.5 h-2.5 ${primaryBgClass} rounded-sm`}></div> Active
-                                </Text>
-                                <Metric className={`text-4xl font-black ${primaryColorClass}`}>{summaryStats.physicalActive}</Metric>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card className={`p-4 border-border shadow-sm flex flex-col justify-between ${isNpu ? 'opacity-50 pointer-events-none' : ''}`}>
-                        <Text className="font-bold text-foreground mb-4">MIG (GPU Only)</Text>
-                        <div className="flex justify-between items-end px-2">
-                            <div className="flex flex-col items-center">
-                                <Text className="text-xs font-bold text-muted-foreground uppercase mb-1">Total</Text>
-                                <Metric className="text-4xl font-black text-foreground">{summaryStats.migTotal}</Metric>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <Text className={`flex items-center gap-1.5 text-xs font-bold ${primaryColorClass} uppercase mb-1`}>
-                                    <div className={`w-2.5 h-2.5 ${primaryBgClass} rounded-sm`}></div> Active
-                                </Text>
-                                <Metric className={`text-4xl font-black ${primaryColorClass}`}>{summaryStats.migActive}</Metric>
-                            </div>
-                            <div className="flex flex-col items-center">
-                                <Text className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase mb-1">
-                                    <div className="w-2.5 h-2.5 bg-gray-300 rounded-sm"></div> Idle
-                                </Text>
-                                <Metric className="text-4xl font-black text-gray-400">{summaryStats.migIdle}</Metric>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <Card className="col-span-1 border border-border flex flex-col p-0 overflow-hidden">
-                        <div className="p-4 border-b border-border">
-                            <h3 className="text-lg font-bold mb-4">{primaryTitle} Map</h3>
-                            <div className="flex gap-4">
-                                <div className="flex-1 space-y-1">
-                                    <label className="text-xs text-muted-foreground font-bold">Group by</label>
-                                    <Select value={groupBy} onValueChange={(v: any) => setGroupBy(v)}>
-                                        <SelectTrigger className="h-8 text-xs bg-muted/50">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="None">None</SelectItem>
-                                            <SelectItem value="Node">Node</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="flex-1 space-y-1">
-                                    <label className="text-xs text-muted-foreground font-bold">Color by</label>
-                                    <Select value={colorBy} onValueChange={(v: any) => setColorBy(v)}>
-                                        <SelectTrigger className="h-8 text-xs bg-muted/50">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Utilization">Utilization</SelectItem>
-                                            <SelectItem value="Status">Status</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="min-h-[400px] w-full flex bg-background relative">
-                            <div className="absolute top-4 left-4 z-10 flex flex-col gap-1 text-[10px] text-muted-foreground font-medium">
-                                {colorBy === 'Utilization' ? (
-                                    <>
-                                        <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-600' : 'bg-blue-600'}`}></div> ~100%</div>
-                                        <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-500' : 'bg-blue-500'}`}></div> ~80%</div>
-                                        <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-400' : 'bg-blue-400'}`}></div> ~60%</div>
-                                        <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-300' : 'bg-blue-300'}`}></div> ~40%</div>
-                                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-200 border border-border"></div> ~0%</div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${primaryBgClass} rounded-sm`}></div> Active</div>
-                                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-400 rounded-sm"></div> Idle</div>
-                                    </>
-                                )}
-                            </div>
-
-                            {isLoading ? (
-                                <div className="w-full h-full flex items-center justify-center animate-pulse text-muted-foreground">Loading {primaryTitle} Map...</div>
-                            ) : (
-                                <div className="w-full h-full flex-1 pt-8 pl-16 overflow-auto">
-                                    <AcceleratorHexMap data={devices} acceleratorType={acceleratorMode} selectedNode={selectedMapNode} onNodeSelect={setSelectedMapNode} groupBy={groupBy} colorBy={colorBy} />
-                                </div>
-                            )}
-                        </div>
-                    </Card>
-
-                    <div className="col-span-2 flex flex-col space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                            <Card className={`p-4 flex flex-col justify-start transition-colors border-border shadow-sm ${selectedMapNode ? (isNpu ? 'bg-green-50/50 dark:bg-green-950/20' : 'bg-blue-50/50 dark:bg-blue-950/20') : ''}`}>
-                                <Text className="font-bold text-foreground mb-4">{selectedMapNode ? 'Node Memory' : 'Total Memory'}</Text>
-                                <Metric className="text-3xl font-black text-foreground">
-                                    {selectedMapNode ? '32.00' : '293.13'} <span className="text-lg text-muted-foreground font-semibold">GiB</span>
-                                </Metric>
-                            </Card>
-                            <Card className={`p-4 flex flex-col justify-start transition-colors border-border shadow-sm ${selectedMapNode ? (isNpu ? 'bg-green-50/50 dark:bg-green-950/20' : 'bg-blue-50/50 dark:bg-blue-950/20') : ''}`}>
-                                <Text className="font-bold text-foreground mb-4">{selectedMapNode ? 'Node Memory Usage' : 'Total Memory Usage'}</Text>
-                                <Metric className="text-3xl font-black text-foreground">
-                                    {selectedMapNode ? '18.4' : '79.84'} <span className="text-lg text-muted-foreground font-semibold">GiB</span>
-                                </Metric>
-                            </Card>
-                            <Card className={`p-4 flex flex-col justify-start transition-colors border-border shadow-sm ${selectedMapNode ? (isNpu ? 'bg-green-50/50 dark:bg-green-950/20' : 'bg-blue-50/50 dark:bg-blue-950/20') : ''}`}>
-                                <Text className="font-bold text-foreground mb-4">{selectedMapNode ? `Node ${primaryTitle} Util` : `Avg ${primaryTitle} Utilization`}</Text>
-                                <Metric className="text-3xl font-black text-foreground">
-                                    {selectedMapNode ? '65.2' : '21.43'} <span className="text-lg text-muted-foreground font-semibold">%</span>
-                                </Metric>
-                            </Card>
-                            <Card className={`p-4 flex flex-col justify-start transition-colors border-border shadow-sm ${selectedMapNode ? (isNpu ? 'bg-green-50/50 dark:bg-green-950/20' : 'bg-blue-50/50 dark:bg-blue-950/20') : ''}`}>
-                                <Text className="font-bold text-foreground mb-4">Avg Memory Usage</Text>
-                                <Metric className="text-3xl font-black text-foreground">
-                                    9.04 <span className="text-lg text-muted-foreground font-semibold">GiB</span>
-                                </Metric>
-                            </Card>
-                        </div>
-
-                        <Card className={`p-0 flex-1 flex flex-col overflow-hidden ${selectedMapNode ? (isNpu ? 'border-green-500/20 shadow-green-500/10' : 'border-blue-500/20 shadow-blue-500/10') : ''}`}>
-                            <div className="px-4 py-3 border-b border-border bg-muted/20">
-                                <h3 className="font-bold text-sm">
-                                    {selectedMapNode ? `Performance for Node: ${selectedMapNode}` : `${primaryTitle} Performance Summary (Top 5)`}
-                                </h3>
-                            </div>
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-8 p-6 flex-1">
-                                <div className="h-full">
-                                    <Text className="font-bold text-xs mb-2 text-foreground">Utilization (%) {selectedMapNode ? '(Node Accelerators)' : ''}</Text>
-                                    <ReactECharts option={utilData} style={{ height: '240px' }} notMerge={true} />
-                                </div>
-                                <div className="h-full">
-                                    <Text className="font-bold text-xs mb-2 text-foreground">Memory Usage (MiB) {selectedMapNode ? '(Node Accelerators)' : ''}</Text>
-                                    <ReactECharts option={vramData} style={{ height: '240px' }} notMerge={true} />
-                                </div>
-                                <div className="h-full">
-                                    <Text className="font-bold text-xs mb-2 text-foreground">Temperature (°C) {selectedMapNode ? '(Node Accelerators)' : ''}</Text>
-                                    <ReactECharts option={tempData} style={{ height: '240px' }} notMerge={true} />
-                                </div>
-                                <div className="h-full">
-                                    <Text className="font-bold text-xs mb-2 text-foreground">SM/Core Active (%) {selectedMapNode ? '(Node Accelerators)' : ''}</Text>
-                                    <ReactECharts option={smData} style={{ height: '240px' }} notMerge={true} />
-                                </div>
-                            </div>
-                        </Card>
+            <div className="flex flex-col space-y-6 mt-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">
+                            {isNpu ? 'NPU Dashboard' : 'GPU Dashboard'}
+                        </h1>
+                        <p className="text-muted-foreground text-sm flex items-center gap-2 mt-1">
+                            Hardware utilization, cluster metrics, and pod allocation
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${isNpu ? 'bg-green-500/20 text-green-700 dark:text-green-400' : 'bg-blue-500/20 text-blue-700 dark:text-blue-400'}`}>
+                                {isNpu ? 'ATOM / RBLN-CA25' : 'NVIDIA / MIG'}
+                            </span>
+                        </p>
                     </div>
                 </div>
 
-                <div className="space-y-6">
-                    <Card className="overflow-hidden p-0 border-border shadow-sm">
-                        <div className="px-4 py-3 border-b border-border bg-muted/20 flex justify-between items-center">
-                            <h3 className="font-bold text-sm">{primaryTitle} Utilization</h3>
-                            <Select defaultValue="all">
-                                <SelectTrigger className="w-[120px] h-8 text-xs bg-background">
-                                    <SelectValue placeholder="All Nodes" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Nodes</SelectItem>
-                                    <SelectItem value="node-0">node-0</SelectItem>
-                                    <SelectItem value="node-1">node-1</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="w-full overflow-x-auto max-h-[350px] overflow-y-auto">
-                            <table className="w-full text-[11px] text-left whitespace-nowrap">
-                                <thead className="bg-background text-muted-foreground border-b border-border sticky top-0 z-10 shadow-sm">
-                                    <tr>
-                                        <th className="px-3 py-2 font-bold w-10 text-center">상세</th>
-                                        <th className="px-3 py-2 font-bold">Node</th>
-                                        <th className="px-3 py-2 font-bold">Device</th>
-                                        <th className="px-3 py-2 font-bold">Type</th>
-                                        <th className="px-3 py-2 font-bold">Status</th>
-                                        <th className="px-3 py-2 font-bold">Model Name</th>
-                                        {!isNpu && (
+                {isNpu ? (
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
+                        <TabsList className="bg-muted border-border border">
+                            <TabsTrigger value="overview">Cluster Overview</TabsTrigger>
+                            <TabsTrigger value="hardware">Hardware Details</TabsTrigger>
+                            <TabsTrigger value="workload">Workload & Pod Mapping</TabsTrigger>
+                        </TabsList>
+                        
+                        <TabsContent value="overview">
+                            <ClusterOverviewView />
+                        </TabsContent>
+
+                        <TabsContent value="hardware">
+                            <HardwareDetailsView />
+                        </TabsContent>
+
+                        <TabsContent value="workload">
+                            <WorkloadMappingView />
+                        </TabsContent>
+                    </Tabs>
+                ) : (
+                    // Classic view for GPU
+                    <>
+                        {/* Summary Stats Grid */}
+                        <Grid numItems={2} numItemsSm={2} numItemsLg={4} className="gap-6">
+                            <Card className="p-4 border-border shadow-sm rounded-lg flex flex-col justify-between" decoration="top" decorationColor={isNpu ? "emerald" : "blue"}>
+                                <Text className="font-bold text-foreground">Total Nodes</Text>
+                                <Metric className="text-4xl text-foreground font-black mt-2">{summaryStats.totalNodes}</Metric>
+                            </Card>
+                            
+                            {!isNpu && (
+                                <Card className="p-4 border-border shadow-sm rounded-lg flex flex-col justify-between">
+                                    <Text className="font-bold text-foreground">Mig Instances (Active / Idle)</Text>
+                                    <div className="flex items-baseline gap-2 mt-2">
+                                        <Metric className="text-4xl text-blue-500 font-black">{summaryStats.activeMig}</Metric>
+                                        <Text className="text-lg text-muted-foreground font-bold">/ {summaryStats.idleMig}</Text>
+                                    </div>
+                                </Card>
+                            )}
+
+                            <Card className="p-4 border-border shadow-sm rounded-lg flex flex-col justify-between relative overflow-hidden">
+                                <Text className="font-bold text-foreground relative z-10">Total Devices / Allocated</Text>
+                                <div className="flex items-baseline gap-2 mt-2 relative z-10">
+                                    <Metric className="text-4xl text-foreground font-black">{summaryStats.totalDevices}</Metric>
+                                    <Text className="text-lg text-muted-foreground font-bold">/ {summaryStats.activeDevices}</Text>
+                                </div>
+                                <div className="absolute right-0 bottom-0 opacity-10 blur-xl">
+                                    <div className={`w-32 h-32 rounded-full ${isNpu ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                                </div>
+                            </Card>
+                            
+                            <Card className="p-4 border-border shadow-sm rounded-lg flex flex-col justify-between">
+                                <Text className="font-bold text-foreground">Cluster Utilization</Text>
+                                <Metric className="text-4xl text-foreground font-black mt-2">
+                                    {summaryStats.totalDevices > 0 ? Math.round((summaryStats.activeDevices / summaryStats.totalDevices) * 100) : 0}%
+                                </Metric>
+                            </Card>
+                        </Grid>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* HexMap Section */}
+                            <Card className="col-span-1 border border-border rounded-xl flex flex-col p-0 overflow-hidden shadow-sm lg:min-h-[600px]">
+                                <div className="p-4 border-b border-border bg-card">
+                                    <h3 className="text-lg font-bold mb-4">{isNpu ? 'NPU Map' : 'GPU Map'}</h3>
+                                    <div className="flex gap-4">
+                                        <div className="flex-1 space-y-1">
+                                            <label className="text-xs text-muted-foreground font-bold">Group by</label>
+                                            <Select value={groupBy} onValueChange={(v: any) => setGroupBy(v)}>
+                                                <SelectTrigger className="h-8 text-xs bg-muted/50 border-border">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="None">None</SelectItem>
+                                                    <SelectItem value="Node">Node</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="flex-1 space-y-1">
+                                            <label className="text-xs text-muted-foreground font-bold">Color by</label>
+                                            <Select value={colorBy} onValueChange={(v: any) => setColorBy(v)}>
+                                                <SelectTrigger className="h-8 text-xs bg-muted/50 border-border">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Utilization">Utilization</SelectItem>
+                                                    <SelectItem value="Status">Status</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 w-full bg-background relative pt-8 pl-16 overflow-auto">
+                                    {/* Legend */}
+                                    <div className="absolute top-4 left-4 z-10 flex flex-col gap-1 text-[10px] text-muted-foreground font-medium">
+                                        {colorBy === 'Utilization' ? (
                                             <>
-                                                <th className="px-3 py-2 font-bold text-center">MIG Mode</th>
-                                                <th className="px-3 py-2 font-bold text-center">MIG_ID</th>
-                                                <th className="px-3 py-2 font-bold text-center">MIG_PROFILE</th>
+                                                <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-600' : 'bg-blue-600'}`}></div> ~100%</div>
+                                                <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-500' : 'bg-blue-500'}`}></div> ~80%</div>
+                                                <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-400' : 'bg-blue-400'}`}></div> ~60%</div>
+                                                <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-300' : 'bg-blue-300'}`}></div> ~40%</div>
+                                                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-200 border border-border"></div> ~0%</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-center gap-1.5"><div className={`w-3 h-3 ${isNpu ? 'bg-green-500' : 'bg-blue-500'} rounded-sm`}></div> Active</div>
+                                                <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-400 rounded-sm"></div> Idle</div>
                                             </>
                                         )}
-                                        <th className="px-3 py-2 font-bold">Namespace</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border">
-                                    {isLoading ? (
-                                        <tr><td colSpan={isNpu ? 7 : 10} className="text-center py-6 text-muted-foreground animate-pulse">Loading data...</td></tr>
-                                    ) : (
-                                        devices.map((device, idx) => (
-                                            <tr key={device.uuid} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => setSelectedDevice(device.id)}>
-                                                <td className={`px-3 py-2 text-center flex justify-center content-center ${primaryColorClass}`}><Search className="w-3 h-3" /></td>
-                                                <td className="px-3 py-2 font-mono text-muted-foreground">{device.node}</td>
-                                                <td className="px-3 py-2">{device.id}</td>
-                                                <td className="px-3 py-2">{device.type === 'P' ? 'Physical' : (device.type === 'M' ? 'MIG' : 'NPU Core')}</td>
-                                                <td className="px-3 py-2">{device.status}</td>
-                                                <td className="px-3 py-2 text-muted-foreground">{device.model}</td>
-                                                {!isNpu && (
-                                                    <>
-                                                        <td className="px-3 py-2 text-center">{device.migMode}</td>
-                                                        <td className="px-3 py-2 text-center">{device.migId}</td>
-                                                        <td className="px-3 py-2 text-center">{device.migProfile}</td>
-                                                    </>
-                                                )}
-                                                <td className="px-3 py-2">{device.namespace}</td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </Card>
-                </div>
-            </div>
+                                    </div>
 
-            <AcceleratorDetailsSheet
-                isOpen={!!selectedDevice}
-                deviceId={selectedDevice}
-                acceleratorType={acceleratorMode}
-                onClose={() => setSelectedDevice(null)}
-            />
+                                    {isLoading ? (
+                                        <div className="w-full h-full flex items-center justify-center animate-pulse text-muted-foreground">Loading Map...</div>
+                                    ) : (
+                                        <AcceleratorHexMap 
+                                            data={devices} 
+                                            acceleratorType={acceleratorMode} 
+                                            selectedNode={selectedMapNode} 
+                                            onNodeSelect={setSelectedMapNode} 
+                                            groupBy={groupBy} 
+                                            colorBy={colorBy} 
+                                        />
+                                    )}
+                                </div>
+                            </Card>
+
+                            {/* Charts Section */}
+                            <div className="col-span-2 flex flex-col space-y-6">
+                                <Card className="p-0 border-border rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
+                                     <div className="px-4 py-3 border-b border-border bg-card">
+                                        <h3 className="text-sm font-bold">{selectedMapNode ? `Node View: ${selectedMapNode}` : `Cluster View`}</h3>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-8 p-6 flex-1">
+                                        <div className="h-full">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <Text className="font-bold text-xs text-foreground uppercase tracking-widest">Utilization (%)</Text>
+                                            </div>
+                                            <ReactECharts option={utilData} style={{ height: '200px' }} notMerge={true} />
+                                        </div>
+                                        <div className="h-full">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <Text className="font-bold text-xs text-foreground uppercase tracking-widest">Memory Usage (MiB)</Text>
+                                            </div>
+                                            <ReactECharts option={vramData} style={{ height: '200px' }} notMerge={true} />
+                                        </div>
+                                        <div className="h-full">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <Text className="font-bold text-xs text-foreground uppercase tracking-widest">Temperature (°C)</Text>
+                                            </div>
+                                            <ReactECharts option={tempData} style={{ height: '200px' }} notMerge={true} />
+                                        </div>
+                                        <div className="h-full">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <Text className="font-bold text-xs text-foreground uppercase tracking-widest">{isNpu ? 'NPU Core Util (%)' : 'SM Active (%)'}</Text>
+                                            </div>
+                                            <ReactECharts option={smData} style={{ height: '200px' }} notMerge={true} />
+                                        </div>
+                                    </div>
+                                </Card>
+                            </div>
+                        </div>
+
+                        {/* List / Table Section */}
+                        <Card className="p-0 border-border rounded-xl shadow-sm overflow-hidden mt-6">
+                            <div className="px-4 py-3 border-b border-border bg-card flex justify-between items-center">
+                                <h3 className="text-sm font-bold">Device Insights & Workload Details</h3>
+                                <div className="flex items-center gap-2">
+                                    <div className="relative">
+                                        <Search className="w-4 h-4 absolute left-2.5 top-2 text-muted-foreground" />
+                                        <input type="text" placeholder="Search devices..." className="h-8 w-64 bg-muted/50 border border-border rounded-md pl-9 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="w-full overflow-x-auto">
+                                <table className="w-full text-sm text-left whitespace-nowrap">
+                                    <thead className="text-xs text-muted-foreground uppercase bg-muted/20 border-b border-border">
+                                        <tr>
+                                            <th className="px-4 py-3 font-semibold">Node</th>
+                                            <th className="px-4 py-3 font-semibold">Device ID</th>
+                                            <th className="px-4 py-3 font-semibold">Type</th>
+                                            <th className="px-4 py-3 font-semibold text-center">Status</th>
+                                            <th className="px-4 py-3 font-semibold">Model</th>
+                                            {!isNpu && <th className="px-4 py-3 font-semibold">MIG Info</th>}
+                                            <th className="px-4 py-3 font-semibold">Namespace</th>
+                                            <th className="px-4 py-3 font-semibold">Pod</th>
+                                            <th className="px-4 py-3 font-semibold">VRAM</th>
+                                            <th className="px-4 py-3 font-semibold">Temp</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                        {isLoading ? (
+                                            <tr>
+                                                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading device data...</td>
+                                            </tr>
+                                        ) : devices.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">No devices found.</td>
+                                            </tr>
+                                        ) : (
+                                            devices.map((device) => (
+                                                <tr key={`${device.node}-${device.id}`} 
+                                                    className="hover:bg-muted/50 cursor-pointer transition-colors"
+                                                    onClick={() => setSelectedDevice(device.id)}
+                                                >
+                                                    <td className="px-4 py-3 font-medium text-foreground">{device.node}</td>
+                                                    <td className="px-4 py-3 font-mono text-muted-foreground">{device.id}</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-semibold">{device.type}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        {device.status === 'Active' ? (
+                                                            <div className={`inline-flex items-center justify-center w-3 h-3 rounded-full ${isNpu ? 'bg-green-500' : 'bg-blue-500'} ring-4 ${isNpu ? 'ring-green-500/20' : 'ring-blue-500/20'}`}></div>
+                                                        ) : (
+                                                            <div className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-600"></div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-muted-foreground">{device.model}</td>
+                                                    
+                                                    {!isNpu && (
+                                                        <td className="px-4 py-3">
+                                                            {device.type === 'M' ? (
+                                                                <div className="flex flex-col text-xs">
+                                                                    <span className="text-muted-foreground">ID: {device.migId}</span>
+                                                                    <span>{device.migProfile}</span>
+                                                                </div>
+                                                            ) : '-'}
+                                                        </td>
+                                                    )}
+                                                    <td className="px-4 py-3">{device.namespace}</td>
+                                                    <td className="px-4 py-3">{device.pod}</td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                                                                <div className={`h-full ${isNpu ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${(parseInt(device.vramUsage) / parseInt(device.vramTotal)) * 100}%` }}></div>
+                                                            </div>
+                                                            <span className="text-xs text-muted-foreground">{device.vramUsage}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-muted-foreground">{device.temperature}°C</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </Card>
+                    </>
+                )}
+
+                <AcceleratorDetailsSheet 
+                    isOpen={!!selectedDevice} 
+                    deviceId={selectedDevice} 
+                    acceleratorType={acceleratorMode}
+                    onClose={() => setSelectedDevice(null)} 
+                />
+            </div>
         </DashboardLayout>
     );
 }

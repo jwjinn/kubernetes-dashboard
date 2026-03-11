@@ -48,6 +48,7 @@ export interface NpuDevice {
     id: string;
     node: string;
     model: string;
+    type: 'P' | 'M' | 'C'; // Physical, MIG, Core
     status: 'Active' | 'Idle' | 'Error';
     utilization: number;
     uuid: string;
@@ -56,7 +57,41 @@ export interface NpuDevice {
     vramUsage: string;
     vramTotal: string;
     temperature: number;
+    power: number; // Added for Hardware Details
+    migMode?: string;
+    migId?: string;
+    migProfile?: string;
 }
+
+export interface NpuProcessContext {
+    pid: string;
+    processName: string;
+    priority: string;
+    status: string;
+    memalloc: string;
+    node: string;
+    deviceIdx: string;
+}
+
+// New API functions for the NPU dashboard tabs
+export const fetchNpuClusterOverview = async () => {
+    const response = await apiFetch(`/api/npu/cluster-overview`);
+    // Fallback or error handling
+    if (!response.ok) throw new Error('Failed to fetch NPU cluster overview');
+    return response.json();
+};
+
+export const fetchNpuWorkloadMapping = async () => {
+    const response = await apiFetch(`/api/npu/workload-mapping`);
+    if (!response.ok) throw new Error('Failed to fetch NPU workload mapping');
+    return response.json();
+};
+
+export const fetchNpuHardwareDetails = async () => {
+    const response = await apiFetch(`/api/npu/hardware-details`);
+    if (!response.ok) throw new Error('Failed to fetch NPU hardware details');
+    return response.json();
+};
 
 export const fetchContainerMap = async () => {
     const response = await apiFetch(`/api/k8s/containers`);

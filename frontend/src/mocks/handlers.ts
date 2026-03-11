@@ -113,7 +113,67 @@ const generateInitialNpuDevices = (): NpuDevice[] => {
     return devices;
 };
 
+// Generate Mock Data for New Endpoints
+const STATIC_NPU_CLUSTER_OVERVIEW = {
+    totalCapacity: 16,
+    allocated: 13,
+    hardwareVersions: [
+        { node: 'worker-01', driverVersion: '3.0.0', family: 'ATOM', product: 'RBLN-CA25' },
+        { node: 'worker-02', driverVersion: '3.0.0', family: 'ATOM', product: 'RBLN-CA25' },
+    ],
+    nodeAllocation: [
+        { node: 'worker-01', allocated: 5, capacity: 8 },
+        { node: 'worker-02', allocated: 8, capacity: 8 },
+    ]
+};
+
+const STATIC_NPU_HARDWARE_DETAILS = {
+    devices: generateInitialNpuDevices(),
+    topology: [
+        {
+            groupId: 'rbln-group-1', node: 'worker-01', parent: 'rbln0',
+            children: ['rbln1', 'rbln2', 'rbln3']
+        },
+        {
+            groupId: 'rbln-group-2', node: 'worker-01', parent: 'rbln4',
+            children: ['rbln5', 'rbln6', 'rbln7']
+        },
+        {
+            groupId: 'rbln-group-3', node: 'worker-02', parent: 'rbln0',
+            children: ['rbln1']
+        },
+        {
+            groupId: 'rbln-group-4', node: 'worker-02', parent: 'rbln2',
+            children: ['rbln3']
+        },
+        {
+            groupId: 'rbln-group-5', node: 'worker-02', parent: 'rbln4',
+            children: ['rbln5', 'rbln7']
+        },
+        {
+            groupId: 'rbln-group-6', node: 'worker-02', parent: 'rbln6',
+            children: []
+        }
+    ]
+};
+
+const STATIC_NPU_WORKLOAD_MAPPING = {
+    podMappings: [
+        { podName: 'rbln-pytorch-pod-1request', node: 'worker-02', requested: 1, devices: ['rbln6'] },
+        { podName: 'rbln-pytorch-pod-2request', node: 'worker-02', requested: 2, devices: ['rbln0', 'rbln1'] },
+        { podName: 'rbln-pytorch-pod-3request', node: 'worker-02', requested: 3, devices: ['rbln4', 'rbln5', 'rbln7'] },
+        { podName: 'rbln-pytorch-pod-5request', node: 'worker-01', requested: 5, devices: ['rbln0', 'rbln4', 'rbln5', 'rbln6', 'rbln7'] },
+    ],
+    contexts: [
+        { pid: '10432', processName: 'python', priority: 'High', status: 'Running', memalloc: '12.4 GiB', node: 'worker-01', deviceIdx: 'rbln0' },
+        { pid: '10433', processName: 'python', priority: 'High', status: 'Running', memalloc: '14.1 GiB', node: 'worker-01', deviceIdx: 'rbln4' },
+        { pid: '11021', processName: 'python', priority: 'Normal', status: 'Running', memalloc: '8.2 GiB', node: 'worker-02', deviceIdx: 'rbln0' },
+        { pid: '11022', processName: 'python', priority: 'Normal', status: 'Running', memalloc: '8.2 GiB', node: 'worker-02', deviceIdx: 'rbln1' },
+    ]
+};
+
 const STATIC_GPU_DEVICES = generateInitialGpuDevices();
+
 const STATIC_NPU_DEVICES = generateInitialNpuDevices();
 
 // --- MOCK CONSTANTS & HELPERS ---
@@ -323,6 +383,18 @@ export const handlers = [
 
     http.get('/api/npu/trends', () => {
         return HttpResponse.json(STATIC_NPU_TRENDS);
+    }),
+
+    http.get('/api/npu/cluster-overview', () => {
+        return HttpResponse.json(STATIC_NPU_CLUSTER_OVERVIEW);
+    }),
+
+    http.get('/api/npu/hardware-details', () => {
+        return HttpResponse.json(STATIC_NPU_HARDWARE_DETAILS);
+    }),
+
+    http.get('/api/npu/workload-mapping', () => {
+        return HttpResponse.json(STATIC_NPU_WORKLOAD_MAPPING);
     }),
 
     // Logs API

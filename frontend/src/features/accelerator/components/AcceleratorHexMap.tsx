@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 export interface AcceleratorDevice {
     id: string;
     node: string;
-    type?: 'P' | 'M'; // Physical or MIG (GPU specific)
+    type?: 'P' | 'M' | 'C'; // Physical or MIG (GPU specific) or Core (NPU specific)
     status: 'Active' | 'Idle' | 'Error';
     utilization: number;
     model: string;
