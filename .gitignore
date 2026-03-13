@@ -10,3 +10,5 @@ temp-theme/
 .vscode/
 *.jar
 *.tmp
+backend/.gocache/
+backend/dashboard-backend.exe

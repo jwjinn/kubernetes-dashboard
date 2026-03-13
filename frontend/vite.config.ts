@@ -15,7 +15,7 @@ export default defineConfig(({ mode }): UserConfig => {
     server: {
       https: (useHttps ? true : undefined) as any,
       proxy: {
-        '/api/data': {
+        '/api': {
           target: 'http://localhost:8081',
           changeOrigin: true,
         }

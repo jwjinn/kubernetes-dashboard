@@ -22,7 +22,7 @@ export function ClusterSummaryWidget() {
         return <Card>Error loading cluster data.</Card>;
     }
 
-    const gpuUsagePercent = Math.round((data.usedGpu / data.totalGpu) * 100);
+    const gpuUsagePercent = data.totalGpu > 0 ? Math.round((data.usedGpu / data.totalGpu) * 100) : 0;
 
     return (
         <Grid numItemsSm={1} numItemsLg={3} className="gap-6">

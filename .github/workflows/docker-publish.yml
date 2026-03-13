@@ -2,18 +2,16 @@ name: Build and Publish Docker Images
 
 on:
   push:
-    branches: [ "master", "main" ]
-    # 이 워크플로우는 아래 경로에 변경 사항이 있을 때만 트리거됩니다.
+    branches: ["master", "main"]
     paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - '.github/workflows/**'
+      - "frontend/**"
+      - "backend/**"
+      - ".github/workflows/**"
 
 env:
-  REGISTRY: ghcr.io # GitHub Container Registry 사용 (Docker Hub 사용 시 docker.io 로 변경)
+  REGISTRY: ghcr.io
 
 jobs:
-  # 1. 어떤 디렉토리가 변경되었는지 감지하는 Job
   check-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -22,8 +20,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      # dorny/paths-filter를 사용하여 변경된 폴더를 정확히 감지합니다.
+
       - name: Check paths
         uses: dorny/paths-filter@v3
         id: filter
@@ -34,16 +31,13 @@ jobs:
             backend:
               - 'backend/**'
 
-  # 2. Frontend 빌드 및 푸시 (frontend 폴더가 변경되었을 때만 실행)
   build-frontend:
     needs: check-changes
     if: ${{ needs.check-changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
-    # GitHub Container Registry(GHCR)에 푸시하기 위한 권한 부여
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -55,14 +49,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata for frontend image
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # 소문자로 변환된 저장소 이름을 사용합니다. (예: ghcr.io/jwjinn/kubernetes-dashboard-frontend)
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-frontend
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes-dashboard-frontend
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
 
-      - name: Build and push Docker image
+      - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -71,7 +67,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # 3. Backend 빌드 및 푸시 (backend 폴더가 변경되었을 때만 실행)
   build-backend:
     needs: check-changes
     if: ${{ needs.check-changes.outputs.backend == 'true' }}
@@ -79,7 +74,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -91,13 +85,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata for backend image
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}-backend
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kubernetes-dashboard-backend
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
 
-      - name: Build and push Docker image
+      - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend

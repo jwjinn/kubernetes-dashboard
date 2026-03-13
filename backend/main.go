@@ -3,91 +3,501 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-var (
-	// In production, these should come from environment variables
-	keycloakURL = "http://localhost:8080/realms/dashboard-realm"
+const (
+	defaultFrontendOrigin = "http://localhost:5173"
+	defaultBackendPort    = "8081"
 )
 
-func authMiddleware(next http.Handler, verifier *oidc.IDTokenVerifier) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Handle CORS preflight
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173") // React default port
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+type app struct {
+	kubeClient    kubernetes.Interface
+	authEnabled   bool
+	allowedOrigin string
+	tokenVerifier *oidc.IDTokenVerifier
+}
 
-		rawAccessToken := r.Header.Get("Authorization")
-		if rawAccessToken == "" {
-			http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
-			return
-		}
+type clusterSummaryResponse struct {
+	UsedGPU      int    `json:"usedGpu"`
+	TotalGPU     int    `json:"totalGpu"`
+	IdleGPU      int    `json:"idleGpu"`
+	Temperature  int    `json:"temperature"`
+	HealthStatus string `json:"healthStatus"`
+}
 
-		parts := strings.Split(rawAccessToken, " ")
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
-			return
-		}
+type topologyResponse struct {
+	Nodes []flowNode `json:"nodes"`
+	Edges []flowEdge `json:"edges"`
+}
 
-		idToken, err := verifier.Verify(context.Background(), parts[1])
-		if err != nil {
-			http.Error(w, "Invalid token: "+err.Error(), http.StatusUnauthorized)
-			return
-		}
+type flowNode struct {
+	ID       string         `json:"id"`
+	Type     string         `json:"type"`
+	Position flowPosition   `json:"position"`
+	Data     map[string]any `json:"data"`
+}
 
-		var claims struct {
-			PreferredUsername string `json:"preferred_username"`
-		}
-		if err := idToken.Claims(&claims); err != nil {
-			log.Println("Failed to parse claims:", err)
-		}
+type flowPosition struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
 
-		log.Printf("Authenticated request from user: %s", claims.PreferredUsername)
-
-		next.ServeHTTP(w, r)
-	}
+type flowEdge struct {
+	ID     string `json:"id"`
+	Source string `json:"source"`
+	Target string `json:"target"`
 }
 
 func main() {
 	ctx := context.Background()
 
-	provider, err := oidc.NewProvider(ctx, keycloakURL)
+	kubeClient, err := newKubernetesClient()
 	if err != nil {
-		log.Fatalf("Failed to query provider %q: %v. Is Keycloak running?", keycloakURL, err)
+		log.Fatalf("failed to create kubernetes client: %v", err)
 	}
 
-	oidcConfig := &oidc.Config{
-		SkipClientIDCheck: true, 
+	application := &app{
+		kubeClient:    kubeClient,
+		authEnabled:   strings.EqualFold(os.Getenv("AUTH_ENABLED"), "true"),
+		allowedOrigin: envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
 	}
-	verifier := provider.Verifier(oidcConfig)
+
+	if application.authEnabled {
+		verifier, err := newOIDCVerifier(ctx)
+		if err != nil {
+			log.Fatalf("failed to initialize OIDC verifier: %v", err)
+		}
+		application.tokenVerifier = verifier
+	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", application.handleHealth)
+	mux.HandleFunc("/api/clusters/summary", application.handleClusterSummary)
+	mux.HandleFunc("/api/topology", application.handleTopology)
+	mux.HandleFunc("/api/pods/", application.handlePods)
 
-	mux.HandleFunc("/api/data", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		response := map[string]string{
-			"message": "Hello from the Go backend! Your token is valid.",
-			"status":  "success",
-		}
-		json.NewEncoder(w).Encode(response)
-	})
+	port := envOrDefault("PORT", defaultBackendPort)
+	addr := ":" + port
 
-	protectedHandler := authMiddleware(mux, verifier)
+	log.Printf("backend listening on http://localhost:%s", port)
+	log.Printf("kubernetes auth enabled: %t", application.authEnabled)
 
-	port := ":8081"
-	fmt.Printf("Backend server starting on http://localhost%s\n", port)
-	if err := http.ListenAndServe(port, protectedHandler); err != nil {
+	if err := http.ListenAndServe(addr, application.withMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func newKubernetesClient() (kubernetes.Interface, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		kubeconfig := os.Getenv("KUBECONFIG")
+		if kubeconfig == "" {
+			home, homeErr := os.UserHomeDir()
+			if homeErr != nil {
+				return nil, fmt.Errorf("failed to resolve user home directory: %w", homeErr)
+			}
+			kubeconfig = filepath.Join(home, ".kube", "config")
+		}
+
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build kubeconfig %q: %w", kubeconfig, err)
+		}
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
+	}
+
+	return clientset, nil
+}
+
+func newOIDCVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+	keycloakURL := envOrDefault("OIDC_ISSUER_URL", "http://localhost:8080/realms/dashboard-realm")
+
+	provider, err := oidc.NewProvider(ctx, keycloakURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query provider %q: %w", keycloakURL, err)
+	}
+
+	return provider.Verifier(&oidc.Config{SkipClientIDCheck: true}), nil
+}
+
+func (a *app) withMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a.setCORSHeaders(w)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if a.authEnabled && strings.HasPrefix(r.URL.Path, "/api/") {
+			if err := a.authorizeRequest(r); err != nil {
+				writeError(w, http.StatusUnauthorized, err.Error())
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (a *app) authorizeRequest(r *http.Request) error {
+	if a.tokenVerifier == nil {
+		return errors.New("token verifier is not configured")
+	}
+
+	rawAccessToken := r.Header.Get("Authorization")
+	if rawAccessToken == "" {
+		return errors.New("missing Authorization header")
+	}
+
+	parts := strings.Split(rawAccessToken, " ")
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return errors.New("invalid Authorization header format")
+	}
+
+	if _, err := a.tokenVerifier.Verify(r.Context(), parts[1]); err != nil {
+		return fmt.Errorf("invalid token: %w", err)
+	}
+
+	return nil
+}
+
+func (a *app) setCORSHeaders(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", a.allowedOrigin)
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+}
+
+func (a *app) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if _, err := a.kubeClient.Discovery().ServerVersion(); err != nil {
+		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("kubernetes API unavailable: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+	})
+}
+
+func (a *app) handleClusterSummary(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	nodes, err := a.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list nodes: %v", err))
+		return
+	}
+
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list pods: %v", err))
+		return
+	}
+
+	totalGPU := 0
+	usedGPU := 0
+	readyNodes := 0
+
+	for _, node := range nodes.Items {
+		totalGPU += gpuCapacity(node.Status.Allocatable)
+		if isNodeReady(node) {
+			readyNodes++
+		}
+	}
+
+	for _, pod := range pods.Items {
+		usedGPU += podGPURequest(&pod)
+	}
+
+	if usedGPU > totalGPU {
+		usedGPU = totalGPU
+	}
+
+	healthStatus := "Healthy"
+	switch {
+	case len(nodes.Items) == 0:
+		healthStatus = "Unknown"
+	case readyNodes < len(nodes.Items):
+		healthStatus = "Degraded"
+	case totalGPU > 0 && usedGPU >= totalGPU:
+		healthStatus = "Busy"
+	}
+
+	usageRatio := 0.0
+	if totalGPU > 0 {
+		usageRatio = float64(usedGPU) / float64(totalGPU)
+	}
+
+	temperature := 48 + int(usageRatio*35)
+	if readyNodes < len(nodes.Items) {
+		temperature += 5
+	}
+	if temperature > 95 {
+		temperature = 95
+	}
+
+	writeJSON(w, http.StatusOK, clusterSummaryResponse{
+		UsedGPU:      usedGPU,
+		TotalGPU:     totalGPU,
+		IdleGPU:      max(totalGPU-usedGPU, 0),
+		Temperature:  temperature,
+		HealthStatus: healthStatus,
+	})
+}
+
+func (a *app) handleTopology(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	filterNode := r.URL.Query().Get("nodeId")
+
+	nodes, err := a.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list nodes: %v", err))
+		return
+	}
+
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list pods: %v", err))
+		return
+	}
+
+	var flowNodes []flowNode
+	var flowEdges []flowEdge
+
+	serverIndex := 0
+	for _, node := range nodes.Items {
+		if filterNode != "" && node.Name != filterNode {
+			continue
+		}
+
+		serverNodeID := "node:" + node.Name
+		serverX := float64(serverIndex) * 360
+
+		flowNodes = append(flowNodes, flowNode{
+			ID:       serverNodeID,
+			Type:     "serverNode",
+			Position: flowPosition{X: serverX, Y: 0},
+			Data: map[string]any{
+				"label":  node.Name,
+				"status": nodeHealthStatus(node),
+			},
+		})
+
+		gpuTotal := gpuCapacity(node.Status.Allocatable)
+		gpuAnchorIDs := make([]string, 0, max(gpuTotal, 1))
+
+		if gpuTotal > 0 {
+			for gpuIndex := 0; gpuIndex < gpuTotal; gpuIndex++ {
+				gpuID := fmt.Sprintf("gpu:%s:%d", node.Name, gpuIndex+1)
+				gpuAnchorIDs = append(gpuAnchorIDs, gpuID)
+				flowNodes = append(flowNodes, flowNode{
+					ID:       gpuID,
+					Type:     "gpuNode",
+					Position: flowPosition{X: serverX + float64(gpuIndex*170), Y: 180},
+					Data: map[string]any{
+						"label":  fmt.Sprintf("%s GPU-%d", node.Name, gpuIndex+1),
+						"status": nodeHealthStatus(node),
+					},
+				})
+				flowEdges = append(flowEdges, flowEdge{
+					ID:     fmt.Sprintf("edge:%s:%s", serverNodeID, gpuID),
+					Source: serverNodeID,
+					Target: gpuID,
+				})
+			}
+		}
+
+		podOffset := 0
+		for _, pod := range pods.Items {
+			if pod.Spec.NodeName != node.Name || shouldSkipPod(pod) {
+				continue
+			}
+
+			podID := fmt.Sprintf("pod:%s:%s", pod.Namespace, pod.Name)
+			podX := serverX + float64((podOffset%3)*170)
+			podY := 360 + float64((podOffset/3)*120)
+
+			flowNodes = append(flowNodes, flowNode{
+				ID:       podID,
+				Type:     "podNode",
+				Position: flowPosition{X: podX, Y: podY},
+				Data: map[string]any{
+					"label":     pod.Name,
+					"namespace": pod.Namespace,
+					"status":    podHealthStatus(pod),
+				},
+			})
+
+			parentID := serverNodeID
+			if len(gpuAnchorIDs) > 0 {
+				parentID = gpuAnchorIDs[podOffset%len(gpuAnchorIDs)]
+			}
+
+			flowEdges = append(flowEdges, flowEdge{
+				ID:     fmt.Sprintf("edge:%s:%s", parentID, podID),
+				Source: parentID,
+				Target: podID,
+			})
+
+			podOffset++
+		}
+
+		serverIndex++
+	}
+
+	writeJSON(w, http.StatusOK, topologyResponse{
+		Nodes: flowNodes,
+		Edges: flowEdges,
+	})
+}
+
+func (a *app) handlePods(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if !strings.HasSuffix(r.URL.Path, "/terminate") {
+		writeError(w, http.StatusNotFound, "endpoint not found")
+		return
+	}
+
+	podRef := strings.TrimPrefix(r.URL.Path, "/api/pods/")
+	podRef = strings.TrimSuffix(podRef, "/terminate")
+
+	namespace, podName, err := parsePodReference(podRef)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	deleteGracePeriod := int64(0)
+	deletePolicy := metav1.DeletePropagationForeground
+	if err := a.kubeClient.CoreV1().Pods(namespace).Delete(ctx, podName, metav1.DeleteOptions{
+		GracePeriodSeconds: &deleteGracePeriod,
+		PropagationPolicy:  &deletePolicy,
+	}); err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to delete pod %s/%s: %v", namespace, podName, err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": fmt.Sprintf("Pod %s/%s was scheduled for termination.", namespace, podName),
+	})
+}
+
+func parsePodReference(raw string) (string, string, error) {
+	parts := strings.Split(raw, ":")
+	if len(parts) != 3 || parts[0] != "pod" {
+		return "", "", fmt.Errorf("invalid pod reference %q", raw)
+	}
+	return parts[1], parts[2], nil
+}
+
+func gpuCapacity(resources corev1.ResourceList) int {
+	total := 0
+	for resourceName, quantity := range resources {
+		resourceKey := string(resourceName)
+		if strings.Contains(resourceKey, "gpu") {
+			total += int(quantity.Value())
+		}
+	}
+	return total
+}
+
+func podGPURequest(pod *corev1.Pod) int {
+	total := resource.NewQuantity(0, resource.DecimalSI)
+	for _, container := range pod.Spec.Containers {
+		for resourceName, quantity := range container.Resources.Requests {
+			if strings.Contains(string(resourceName), "gpu") {
+				total.Add(quantity)
+			}
+		}
+	}
+	return int(total.Value())
+}
+
+func isNodeReady(node corev1.Node) bool {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == corev1.NodeReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+func nodeHealthStatus(node corev1.Node) string {
+	if !isNodeReady(node) {
+		return "critical"
+	}
+	if gpuCapacity(node.Status.Allocatable) == 0 {
+		return "warning"
+	}
+	return "healthy"
+}
+
+func podHealthStatus(pod corev1.Pod) string {
+	switch pod.Status.Phase {
+	case corev1.PodRunning, corev1.PodSucceeded:
+		return "running"
+	case corev1.PodPending:
+		return "pending"
+	default:
+		return "failed"
+	}
+}
+
+func shouldSkipPod(pod corev1.Pod) bool {
+	return pod.Spec.NodeName == "" || pod.Status.Phase == corev1.PodSucceeded
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Printf("failed to write json response: %v", err)
+	}
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
