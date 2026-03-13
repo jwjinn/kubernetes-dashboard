@@ -233,33 +233,61 @@
 </div>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        // Login Fields
-        var userField = document.getElementById("username") || document.getElementById("email");
-        if (userField && !userField.placeholder) {
-            userField.placeholder = "id 입력하세요";
-        }
-        var passField = document.getElementById("password");
-        if (passField && !passField.placeholder) {
-            passField.placeholder = "password 입력하세요";
+        // Helper to set placeholder if field exists
+        function setPH(id, text) {
+            var el = document.getElementById(id);
+            if (el) el.placeholder = text;
         }
 
-        // Registration Fields
-        var emailField = document.getElementById("email");
-        if (emailField && !emailField.placeholder) {
-            emailField.placeholder = "이메일을 입력하세요";
+        // Login & General Fields
+        setPH("username", "이메일 또는 ID를 입력하세요");
+        setPH("password", "비밀번호를 입력하세요");
+        setPH("password-confirm", "비밀번호 확인");
+
+        // Registration & Update Profile Fields
+        setPH("email", "이메일을 입력하세요");
+        setPH("firstName", "이름");
+        setPH("lastName", "성");
+        
+        // Add dynamic labels if they are missing (for the '*' problem)
+        function fixLabels() {
+            var requiredLabels = document.querySelectorAll('.pf-c-form__label-text, label');
+            requiredLabels.forEach(function(lbl) {
+                var text = lbl.innerText.trim();
+                if (text === "*" || text === "" || text === "*(필수)") {
+                    var targetId = lbl.getAttribute('for') || (lbl.parentElement ? lbl.parentElement.getAttribute('for') : null);
+                    if (!targetId && lbl.nextElementSibling && lbl.nextElementSibling.id) {
+                         targetId = lbl.nextElementSibling.id;
+                    }
+                    
+                    var newText = "";
+                    if (targetId === "username") newText = "아이디 / 이메일";
+                    else if (targetId === "password") newText = "비밀번호";
+                    else if (targetId === "password-confirm") newText = "비밀번호 확인";
+                    else if (targetId === "email") newText = "이메일 주소";
+                    else if (targetId === "firstName") newText = "이름";
+                    else if (targetId === "lastName") newText = "성";
+                    
+                    if (newText) {
+                        lbl.innerHTML = '<span class="pf-c-form__label-required">*</span> ' + newText;
+                    }
+                }
+            });
         }
-        var firstNameField = document.getElementById("firstName");
-        if (firstNameField && !firstNameField.placeholder) {
-            firstNameField.placeholder = "이름을 입력하세요";
+        fixLabels();
+
+        // Validation Feedback: If '!' icon exists, find the helper text and make it visible
+        function showValidationErrors() {
+            var errorFields = document.querySelectorAll('.pf-m-error');
+            errorFields.forEach(function(field) {
+                var helperText = field.querySelector('.pf-c-form__helper-text');
+                if (helperText) {
+                    helperText.style.display = 'block';
+                    helperText.style.color = '#c9190b'; // Red color
+                }
+            });
         }
-        var lastNameField = document.getElementById("lastName");
-        if (lastNameField && !lastNameField.placeholder) {
-            lastNameField.placeholder = "성을 입력하세요";
-        }
-        var passConfirmField = document.getElementById("password-confirm");
-        if (passConfirmField && !passConfirmField.placeholder) {
-            passConfirmField.placeholder = "비밀번호를 다시 입력하세요";
-        }
+        showValidationErrors();
 
         // --- Physics Engine & Drag Logic ---
         <#noparse>
