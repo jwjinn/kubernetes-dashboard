@@ -145,11 +145,18 @@ func newKubernetesClient() (kubernetes.Interface, error) {
 }
 
 func newOIDCVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
-	keycloakURL := envOrDefault("OIDC_ISSUER_URL", "http://localhost:8080/realms/dashboard-realm")
+	issuerURL := envOrDefault("OIDC_ISSUER_URL", "http://localhost:8080/realms/dashboard-realm")
+	discoveryURL := envOrDefault("OIDC_DISCOVERY_URL", issuerURL)
 
-	provider, err := oidc.NewProvider(ctx, keycloakURL)
+	discoveryCtx := ctx
+	if discoveryURL != issuerURL {
+		// Use the externally visible issuer while allowing internal discovery URLs.
+		discoveryCtx = oidc.InsecureIssuerURLContext(ctx, issuerURL)
+	}
+
+	provider, err := oidc.NewProvider(discoveryCtx, discoveryURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query provider %q: %w", keycloakURL, err)
+		return nil, fmt.Errorf("failed to query provider discovery %q with issuer %q: %w", discoveryURL, issuerURL, err)
 	}
 
 	return provider.Verifier(&oidc.Config{SkipClientIDCheck: true}), nil

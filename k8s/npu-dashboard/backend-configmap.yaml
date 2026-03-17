@@ -2,12 +2,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dashboard-backend-config
-  namespace: npu_dashboard
+  namespace: npu-dashboard
 data:
   PORT: "8081"
   AUTH_ENABLED: "true"
-  FRONTEND_ORIGIN: "http://192.168.160.69:30000"
-  OIDC_ISSUER_URL: "http://192.168.160.69:30080/realms/dashboard-realm"
+  FRONTEND_ORIGIN: "https://dashboard.home.arpa:32443"
+  OIDC_ISSUER_URL: "https://keycloak.home.arpa:32443/realms/dashboard-realm"
+  OIDC_DISCOVERY_URL: "http://keycloak.keycloak.svc.cluster.local:8080/realms/dashboard-realm"
   OIDC_AUDIENCE: "dashboard-client"
   KUBERNETES_CACHE_RESYNC: "10m"
   SUMMARY_CACHE_TTL: "10s"
