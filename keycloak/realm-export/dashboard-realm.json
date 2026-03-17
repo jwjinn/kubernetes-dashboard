@@ -26,14 +26,20 @@
         "http://127.0.0.1:*/*",
         "http://192.168.160.180:*/*",
         "http://192.168.160.59:*/*",
-        "http://192.168.160.69:*/*"
+        "http://192.168.160.69:*/*",
+        "https://dashboard.home.arpa:32443/*",
+        "https://localhost:*/*",
+        "https://127.0.0.1:*/*"
       ],
       "webOrigins": [
         "http://localhost:*",
         "http://127.0.0.1:*",
         "http://192.168.160.180:*",
         "http://192.168.160.59:*",
-        "http://192.168.160.69:*"
+        "http://192.168.160.69:*",
+        "https://dashboard.home.arpa:32443",
+        "https://localhost:*",
+        "https://127.0.0.1:*"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
