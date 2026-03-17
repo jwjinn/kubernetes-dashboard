@@ -15,7 +15,6 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -27,10 +26,14 @@ const (
 )
 
 type app struct {
-	kubeClient    kubernetes.Interface
-	authEnabled   bool
-	allowedOrigin string
-	tokenVerifier *oidc.IDTokenVerifier
+	kubeClient     kubernetes.Interface
+	clusterCache   *clusterCache
+	responseCache  *ttlCache
+	summaryTTL     time.Duration
+	topologyTTL    time.Duration
+	authEnabled    bool
+	allowedOrigin  string
+	tokenVerifier  *oidc.IDTokenVerifier
 }
 
 type clusterSummaryResponse struct {
@@ -76,7 +79,17 @@ func main() {
 		kubeClient:    kubeClient,
 		authEnabled:   strings.EqualFold(os.Getenv("AUTH_ENABLED"), "true"),
 		allowedOrigin: envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		responseCache: newTTLCache(),
+		summaryTTL:    durationEnvOrDefault("SUMMARY_CACHE_TTL", 10*time.Second),
+		topologyTTL:   durationEnvOrDefault("TOPOLOGY_CACHE_TTL", 15*time.Second),
 	}
+
+	cacheResync := durationEnvOrDefault("KUBERNETES_CACHE_RESYNC", 10*time.Minute)
+	clusterCache, err := newClusterCache(ctx, kubeClient, cacheResync)
+	if err != nil {
+		log.Fatalf("failed to initialize informer cache: %v", err)
+	}
+	application.clusterCache = clusterCache
 
 	if application.authEnabled {
 		verifier, err := newOIDCVerifier(ctx)
@@ -97,6 +110,7 @@ func main() {
 
 	log.Printf("backend listening on http://localhost:%s", port)
 	log.Printf("kubernetes auth enabled: %t", application.authEnabled)
+	log.Printf("informer cache resync interval: %s", cacheResync)
 
 	if err := http.ListenAndServe(addr, application.withMiddleware(mux)); err != nil {
 		log.Fatal(err)
@@ -188,8 +202,8 @@ func (a *app) setCORSHeaders(w http.ResponseWriter) {
 }
 
 func (a *app) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if _, err := a.kubeClient.Discovery().ServerVersion(); err != nil {
-		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("kubernetes API unavailable: %v", err))
+	if a.clusterCache == nil || !a.clusterCache.HasSynced() {
+		writeError(w, http.StatusServiceUnavailable, "kubernetes informer cache is not synced")
 		return
 	}
 
@@ -199,178 +213,53 @@ func (a *app) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleClusterSummary(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-
-	nodes, err := a.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list nodes: %v", err))
-		return
-	}
-
-	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list pods: %v", err))
-		return
-	}
-
-	totalGPU := 0
-	usedGPU := 0
-	readyNodes := 0
-
-	for _, node := range nodes.Items {
-		totalGPU += gpuCapacity(node.Status.Allocatable)
-		if isNodeReady(node) {
-			readyNodes++
+	payload, err := a.responseCache.GetOrSet("cluster-summary", a.summaryTTL, func() (any, error) {
+		nodes, err := a.clusterCache.ListNodes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list nodes from cache: %w", err)
 		}
-	}
 
-	for _, pod := range pods.Items {
-		usedGPU += podGPURequest(&pod)
-	}
+		pods, err := a.clusterCache.ListPods()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list pods from cache: %w", err)
+		}
 
-	if usedGPU > totalGPU {
-		usedGPU = totalGPU
-	}
-
-	healthStatus := "Healthy"
-	switch {
-	case len(nodes.Items) == 0:
-		healthStatus = "Unknown"
-	case readyNodes < len(nodes.Items):
-		healthStatus = "Degraded"
-	case totalGPU > 0 && usedGPU >= totalGPU:
-		healthStatus = "Busy"
-	}
-
-	usageRatio := 0.0
-	if totalGPU > 0 {
-		usageRatio = float64(usedGPU) / float64(totalGPU)
-	}
-
-	temperature := 48 + int(usageRatio*35)
-	if readyNodes < len(nodes.Items) {
-		temperature += 5
-	}
-	if temperature > 95 {
-		temperature = 95
-	}
-
-	writeJSON(w, http.StatusOK, clusterSummaryResponse{
-		UsedGPU:      usedGPU,
-		TotalGPU:     totalGPU,
-		IdleGPU:      max(totalGPU-usedGPU, 0),
-		Temperature:  temperature,
-		HealthStatus: healthStatus,
+		return buildClusterSummary(nodes, pods), nil
 	})
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (a *app) handleTopology(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-
 	filterNode := r.URL.Query().Get("nodeId")
-
-	nodes, err := a.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list nodes: %v", err))
-		return
+	cacheKey := "topology"
+	if filterNode != "" {
+		cacheKey += ":" + filterNode
 	}
 
-	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to list pods: %v", err))
-		return
-	}
-
-	var flowNodes []flowNode
-	var flowEdges []flowEdge
-
-	serverIndex := 0
-	for _, node := range nodes.Items {
-		if filterNode != "" && node.Name != filterNode {
-			continue
+	payload, err := a.responseCache.GetOrSet(cacheKey, a.topologyTTL, func() (any, error) {
+		nodes, err := a.clusterCache.ListNodes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list nodes from cache: %w", err)
 		}
 
-		serverNodeID := "node:" + node.Name
-		serverX := float64(serverIndex) * 360
-
-		flowNodes = append(flowNodes, flowNode{
-			ID:       serverNodeID,
-			Type:     "serverNode",
-			Position: flowPosition{X: serverX, Y: 0},
-			Data: map[string]any{
-				"label":  node.Name,
-				"status": nodeHealthStatus(node),
-			},
-		})
-
-		gpuTotal := gpuCapacity(node.Status.Allocatable)
-		gpuAnchorIDs := make([]string, 0, max(gpuTotal, 1))
-
-		if gpuTotal > 0 {
-			for gpuIndex := 0; gpuIndex < gpuTotal; gpuIndex++ {
-				gpuID := fmt.Sprintf("gpu:%s:%d", node.Name, gpuIndex+1)
-				gpuAnchorIDs = append(gpuAnchorIDs, gpuID)
-				flowNodes = append(flowNodes, flowNode{
-					ID:       gpuID,
-					Type:     "gpuNode",
-					Position: flowPosition{X: serverX + float64(gpuIndex*170), Y: 180},
-					Data: map[string]any{
-						"label":  fmt.Sprintf("%s GPU-%d", node.Name, gpuIndex+1),
-						"status": nodeHealthStatus(node),
-					},
-				})
-				flowEdges = append(flowEdges, flowEdge{
-					ID:     fmt.Sprintf("edge:%s:%s", serverNodeID, gpuID),
-					Source: serverNodeID,
-					Target: gpuID,
-				})
-			}
+		pods, err := a.clusterCache.ListPods()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list pods from cache: %w", err)
 		}
 
-		podOffset := 0
-		for _, pod := range pods.Items {
-			if pod.Spec.NodeName != node.Name || shouldSkipPod(pod) {
-				continue
-			}
-
-			podID := fmt.Sprintf("pod:%s:%s", pod.Namespace, pod.Name)
-			podX := serverX + float64((podOffset%3)*170)
-			podY := 360 + float64((podOffset/3)*120)
-
-			flowNodes = append(flowNodes, flowNode{
-				ID:       podID,
-				Type:     "podNode",
-				Position: flowPosition{X: podX, Y: podY},
-				Data: map[string]any{
-					"label":     pod.Name,
-					"namespace": pod.Namespace,
-					"status":    podHealthStatus(pod),
-				},
-			})
-
-			parentID := serverNodeID
-			if len(gpuAnchorIDs) > 0 {
-				parentID = gpuAnchorIDs[podOffset%len(gpuAnchorIDs)]
-			}
-
-			flowEdges = append(flowEdges, flowEdge{
-				ID:     fmt.Sprintf("edge:%s:%s", parentID, podID),
-				Source: parentID,
-				Target: podID,
-			})
-
-			podOffset++
-		}
-
-		serverIndex++
-	}
-
-	writeJSON(w, http.StatusOK, topologyResponse{
-		Nodes: flowNodes,
-		Edges: flowEdges,
+		return buildTopology(nodes, pods, filterNode), nil
 	})
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (a *app) handlePods(w http.ResponseWriter, r *http.Request) {
@@ -417,6 +306,149 @@ func parsePodReference(raw string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid pod reference %q", raw)
 	}
 	return parts[1], parts[2], nil
+}
+
+func buildClusterSummary(nodes []*corev1.Node, pods []*corev1.Pod) clusterSummaryResponse {
+	totalGPU := 0
+	usedGPU := 0
+	readyNodes := 0
+
+	for _, node := range nodes {
+		totalGPU += gpuCapacity(node.Status.Allocatable)
+		if isNodeReady(*node) {
+			readyNodes++
+		}
+	}
+
+	for _, pod := range pods {
+		usedGPU += podGPURequest(pod)
+	}
+
+	if usedGPU > totalGPU {
+		usedGPU = totalGPU
+	}
+
+	healthStatus := "Healthy"
+	switch {
+	case len(nodes) == 0:
+		healthStatus = "Unknown"
+	case readyNodes < len(nodes):
+		healthStatus = "Degraded"
+	case totalGPU > 0 && usedGPU >= totalGPU:
+		healthStatus = "Busy"
+	}
+
+	usageRatio := 0.0
+	if totalGPU > 0 {
+		usageRatio = float64(usedGPU) / float64(totalGPU)
+	}
+
+	temperature := 48 + int(usageRatio*35)
+	if readyNodes < len(nodes) {
+		temperature += 5
+	}
+	if temperature > 95 {
+		temperature = 95
+	}
+
+	return clusterSummaryResponse{
+		UsedGPU:      usedGPU,
+		TotalGPU:     totalGPU,
+		IdleGPU:      max(totalGPU-usedGPU, 0),
+		Temperature:  temperature,
+		HealthStatus: healthStatus,
+	}
+}
+
+func buildTopology(nodes []*corev1.Node, pods []*corev1.Pod, filterNode string) topologyResponse {
+	var flowNodes []flowNode
+	var flowEdges []flowEdge
+
+	serverIndex := 0
+	for _, node := range nodes {
+		if filterNode != "" && node.Name != filterNode {
+			continue
+		}
+
+		serverNodeID := "node:" + node.Name
+		serverX := float64(serverIndex) * 360
+
+		flowNodes = append(flowNodes, flowNode{
+			ID:       serverNodeID,
+			Type:     "serverNode",
+			Position: flowPosition{X: serverX, Y: 0},
+			Data: map[string]any{
+				"label":  node.Name,
+				"status": nodeHealthStatus(*node),
+			},
+		})
+
+		gpuTotal := gpuCapacity(node.Status.Allocatable)
+		gpuAnchorIDs := make([]string, 0, max(gpuTotal, 1))
+
+		if gpuTotal > 0 {
+			for gpuIndex := 0; gpuIndex < gpuTotal; gpuIndex++ {
+				gpuID := fmt.Sprintf("gpu:%s:%d", node.Name, gpuIndex+1)
+				gpuAnchorIDs = append(gpuAnchorIDs, gpuID)
+				flowNodes = append(flowNodes, flowNode{
+					ID:       gpuID,
+					Type:     "gpuNode",
+					Position: flowPosition{X: serverX + float64(gpuIndex*170), Y: 180},
+					Data: map[string]any{
+						"label":  fmt.Sprintf("%s GPU-%d", node.Name, gpuIndex+1),
+						"status": nodeHealthStatus(*node),
+					},
+				})
+				flowEdges = append(flowEdges, flowEdge{
+					ID:     fmt.Sprintf("edge:%s:%s", serverNodeID, gpuID),
+					Source: serverNodeID,
+					Target: gpuID,
+				})
+			}
+		}
+
+		podOffset := 0
+		for _, pod := range pods {
+			if pod.Spec.NodeName != node.Name || shouldSkipPod(*pod) {
+				continue
+			}
+
+			podID := fmt.Sprintf("pod:%s:%s", pod.Namespace, pod.Name)
+			podX := serverX + float64((podOffset%3)*170)
+			podY := 360 + float64((podOffset/3)*120)
+
+			flowNodes = append(flowNodes, flowNode{
+				ID:       podID,
+				Type:     "podNode",
+				Position: flowPosition{X: podX, Y: podY},
+				Data: map[string]any{
+					"label":     pod.Name,
+					"namespace": pod.Namespace,
+					"status":    podHealthStatus(*pod),
+				},
+			})
+
+			parentID := serverNodeID
+			if len(gpuAnchorIDs) > 0 {
+				parentID = gpuAnchorIDs[podOffset%len(gpuAnchorIDs)]
+			}
+
+			flowEdges = append(flowEdges, flowEdge{
+				ID:     fmt.Sprintf("edge:%s:%s", parentID, podID),
+				Source: parentID,
+				Target: podID,
+			})
+
+			podOffset++
+		}
+
+		serverIndex++
+	}
+
+	return topologyResponse{
+		Nodes: flowNodes,
+		Edges: flowEdges,
+	}
 }
 
 func gpuCapacity(resources corev1.ResourceList) int {
@@ -493,6 +525,21 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func durationEnvOrDefault(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		log.Printf("invalid duration for %s=%q, using fallback %s", key, value, fallback)
+		return fallback
+	}
+
+	return duration
 }
 
 func max(a, b int) int {

@@ -3,12 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { AuthProvider } from 'react-oidc-context'
 import './index.css'
 import App from './App.tsx'
+import { getEnv } from './config/env'
 
 const oidcConfig = {
-  authority: "http://localhost:8080/realms/dashboard-realm",
-  client_id: "dashboard-client",
-  redirect_uri: window.location.origin + "/dashboard", // usually you have a specific callback page, but often returning to root works
-  post_logout_redirect_uri: window.location.origin + "/login", // Returns user to our login page after Keycloak logout
+  authority: getEnv("VITE_OIDC_AUTHORITY", "http://localhost:8080/realms/dashboard-realm"),
+  client_id: getEnv("VITE_OIDC_CLIENT_ID", "dashboard-client"),
+  redirect_uri: window.location.origin + getEnv("VITE_OIDC_REDIRECT_PATH", "/dashboard"),
+  post_logout_redirect_uri: window.location.origin + getEnv("VITE_OIDC_POST_LOGOUT_REDIRECT_PATH", "/login"),
   onSigninCallback: () => {
     window.history.replaceState(
       {},
