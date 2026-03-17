@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dashboard-frontend
-  namespace: npu_dashboard
+  namespace: npu-dashboard
 spec:
   replicas: 1
   revisionHistoryLimit: 2
@@ -17,7 +17,7 @@ spec:
       containers:
         - name: frontend
           image: ghcr.io/jwjinn/kubernetes-dashboard-frontend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
               name: http
@@ -59,13 +59,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dashboard-frontend
-  namespace: npu_dashboard
+  namespace: npu-dashboard
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: dashboard-frontend
   ports:
     - name: http
       port: 80
       targetPort: http
-      nodePort: 30000

@@ -3,12 +3,12 @@
 ## 배포 모델
 
 - Namespace: `npu-dashboard`
-- Frontend 노출 방식: `NodePort`
+- Frontend 노출 방식: `Traefik Ingress + HTTPS`
 - Backend 노출 방식: `ClusterIP`
 - 인증: 모든 `/api/*` 요청은 Keycloak 보호
-- 통신 방식: HTTP
+- 통신 방식: 외부 HTTPS / 내부 Service 간 HTTP
 - 이미지 레지스트리: GHCR public image
-- 이미지 태그 전략: 초기 배포는 `latest`, 안정화 후 `sha-*` 태그로 고정
+- 이미지 태그 전략: 운영 안정화 후 `sha-*` 고정 권장
 
 ## YAML 파일 위치
 
@@ -23,6 +23,7 @@ k8s/
     frontend.yaml
     backend-configmap.yaml
     backend.yaml
+    dashboard-ingress.yaml
     rbac.yaml
 ```
 
@@ -35,18 +36,20 @@ k8s/
 
 ## 사용 엔드포인트
 
-- Frontend 접속 주소: `http://192.168.160.69:30000`
-- Keycloak 외부 주소: `http://192.168.160.69:30080`
+- Frontend 접속 주소: `https://dashboard.home.arpa:32443`
+- Keycloak 외부 주소: `https://keycloak.home.arpa:32443`
 - Backend 서비스 DNS: `http://dashboard-backend.npu-dashboard.svc.cluster.local:8081`
+- Keycloak 내부 DNS: `http://keycloak.keycloak.svc.cluster.local:8080`
 - VictoriaLogs: `http://victoria-logs-single-server.observability.svc.cluster.local:9428`
 - VictoriaTraces: `http://victoria-traces-vtc-vtselect.observability.svc.cluster.local:10471`
 - OTel Collector: `http://otel-collector-collector.observability.svc.cluster.local:4318`
+- Ingress Controller: `Traefik`
 
 ## Frontend에 Nginx 프록시가 필요한 이유
 
-브라우저는 외부에서 frontend `NodePort`만 직접 접근할 수 있다.
+브라우저는 외부에서 `dashboard.home.arpa`로 접속하지만, frontend 컨테이너는 여전히 `/api/*` 요청을 backend Service로 프록시해야 한다.
 
-이번 구조에서는 backend를 `ClusterIP`로만 운영하므로, frontend 컨테이너 내부 Nginx가 `/api/*` 요청을 backend 서비스로 프록시해야 한다.  
+이번 구조에서도 backend는 `ClusterIP`로만 운영하므로, frontend 컨테이너 내부 Nginx가 `/api/*` 요청을 backend 서비스로 프록시해야 한다.  
 배포 매니페스트에는 이 설정을 위한 Nginx ConfigMap이 포함되어 있다.
 
 ## 설정 주입 방식
@@ -77,14 +80,21 @@ OIDC 관련해서는 브라우저/토큰 기준 issuer와 backend 내부 discove
 - `OIDC_DISCOVERY_URL`
   - backend Pod가 내부 DNS로 조회하는 discovery 주소
 
+이 분리가 필요한 이유:
+
+- 브라우저와 토큰은 `https://keycloak.home.arpa:32443`를 기준으로 동작한다.
+- backend Pod는 사용자 PC의 hosts 파일이나 CA 저장소를 쓰지 않으므로, issuer discovery는 내부 Service DNS로 접근하는 편이 안정적이다.
+- `go-oidc`의 issuer override 기능을 사용해 external issuer와 internal discovery를 함께 처리한다.
+
 ## 배포 순서
 
 1. namespace와 RBAC를 적용한다.
 2. backend ConfigMap과 Deployment를 적용한다.
 3. frontend ConfigMap과 Deployment를 적용한다.
-4. frontend NodePort가 외부에서 열리는지 확인한다.
-5. 로그인 시 Keycloak로 정상 리다이렉트되는지 확인한다.
-6. 로그인 후 `/api/clusters/summary` 호출이 성공하는지 확인한다.
+4. dashboard Ingress를 적용한다.
+5. Traefik가 `dashboard.home.arpa`를 정상 라우팅하는지 확인한다.
+6. 로그인 시 Keycloak로 정상 리다이렉트되는지 확인한다.
+7. 로그인 후 `/api/clusters/summary` 호출이 성공하는지 확인한다.
 
 ## 실제 배포 명령 순서
 
@@ -132,11 +142,24 @@ kubectl get pods -n npu-dashboard -w
 
 ```bash
 kubectl get svc -n npu-dashboard
-kubectl describe svc dashboard-frontend -n npu-dashboard
 kubectl describe svc dashboard-backend -n npu-dashboard
+kubectl describe svc dashboard-frontend -n npu-dashboard
 ```
 
-### 8. 백엔드 로그 확인
+기대 상태:
+
+- `dashboard-frontend`: `ClusterIP`
+- `dashboard-backend`: `ClusterIP`
+
+### 8. Ingress 확인
+
+```bash
+kubectl get ingress -A
+kubectl describe ingress dashboard -n npu-dashboard
+kubectl get svc -n traefik
+```
+
+### 9. 백엔드 로그 확인
 
 ```bash
 kubectl logs deploy/dashboard-backend -n npu-dashboard
@@ -147,8 +170,9 @@ kubectl logs deploy/dashboard-backend -n npu-dashboard
 - 서버가 `8081` 포트로 정상 기동했는지
 - `kubernetes auth enabled: true`가 보이는지
 - informer cache 관련 에러가 없는지
+- OIDC verifier 초기화 에러가 없는지
 
-### 9. 프론트 로그 확인
+### 10. 프론트 로그 확인
 
 ```bash
 kubectl logs deploy/dashboard-frontend -n npu-dashboard
@@ -156,10 +180,10 @@ kubectl logs deploy/dashboard-frontend -n npu-dashboard
 
 여기서는 Nginx 기동 오류나 ConfigMap 마운트 문제 여부를 본다.
 
-### 10. 브라우저 접속 확인
+### 11. 브라우저 접속 확인
 
 ```text
-http://192.168.160.69:30000
+https://dashboard.home.arpa:32443
 ```
 
 접속 후 확인할 것:
@@ -167,6 +191,7 @@ http://192.168.160.69:30000
 - 로그인 시 Keycloak로 이동하는지
 - 로그인 후 다시 대시보드로 돌아오는지
 - 화면에서 API 호출 에러가 없는지
+- 브라우저 mixed content 에러가 없는지
 
 ## 개별 적용이 필요할 때
 
@@ -179,6 +204,7 @@ kubectl apply -f k8s/npu-dashboard/backend-configmap.yaml
 kubectl apply -f k8s/npu-dashboard/backend.yaml
 kubectl apply -f k8s/npu-dashboard/frontend-configmap.yaml
 kubectl apply -f k8s/npu-dashboard/frontend.yaml
+kubectl apply -f k8s/npu-dashboard/dashboard-ingress.yaml
 ```
 
 다만 운영 시에는 파일 누락 가능성을 줄이기 위해 `kubectl apply -k k8s/npu-dashboard` 방식을 권장한다.
@@ -198,6 +224,7 @@ kubectl get all -n npu-dashboard
 kubectl describe svc dashboard-frontend -n npu-dashboard
 kubectl logs deploy/dashboard-backend -n npu-dashboard
 kubectl logs deploy/dashboard-frontend -n npu-dashboard
+kubectl describe ingress dashboard -n npu-dashboard
 ```
 
 ## 재배포 명령
@@ -212,5 +239,5 @@ kubectl rollout status deploy/dashboard-backend -n npu-dashboard
 kubectl rollout status deploy/dashboard-frontend -n npu-dashboard
 ```
 
-`imagePullPolicy: IfNotPresent`를 쓰고 있기 때문에, 같은 태그를 재사용할 경우에는 `rollout restart`만으로는 노드에 캐시된 이미지가 재사용될 수 있다.  
-이 경우에는 새 `sha-*` 태그로 매니페스트를 바꾸는 방식이 가장 안전하다.
+현재 매니페스트는 `latest` 태그를 사용할 때 노드 캐시 문제를 피하기 위해 `imagePullPolicy: Always`를 사용한다.  
+운영 단계에서는 `latest` 대신 새 `sha-*` 태그로 고정하는 방식이 가장 안전하다.

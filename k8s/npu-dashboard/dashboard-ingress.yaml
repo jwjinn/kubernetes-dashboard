@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dashboard
+  namespace: npu-dashboard
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - dashboard.home.arpa
+      secretName: dashboard-tls
+  rules:
+    - host: dashboard.home.arpa
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dashboard-frontend
+                port:
+                  number: 80

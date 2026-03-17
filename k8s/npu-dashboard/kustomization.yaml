@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: npu_dashboard
+namespace: npu-dashboard
 resources:
   - namespace.yaml
   - frontend-configmap.yaml
@@ -8,3 +8,4 @@ resources:
   - rbac.yaml
   - backend.yaml
   - frontend.yaml
+  - dashboard-ingress.yaml
