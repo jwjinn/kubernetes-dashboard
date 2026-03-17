@@ -1,0 +1,43 @@
+{
+  "realm": "dashboard-realm",
+  "enabled": true,
+  "displayName": "Kubernetes Dashboard",
+  "loginTheme": "dashboard-theme",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "clients": [
+    {
+      "clientId": "dashboard-client",
+      "name": "dashboard-client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:*/*",
+        "http://127.0.0.1:*/*",
+        "http://192.168.160.180:*/*",
+        "http://192.168.160.59:*/*",
+        "http://192.168.160.69:*/*"
+      ],
+      "webOrigins": [
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+        "http://192.168.160.180:*",
+        "http://192.168.160.59:*",
+        "http://192.168.160.69:*"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ]
+}
