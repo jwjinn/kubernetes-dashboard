@@ -1,4 +1,6 @@
-const getAuthToken = () => localStorage.getItem('k8s_dashboard_token');
+import { getAccessToken } from '@/auth/tokenStore';
+
+const getAuthToken = () => getAccessToken() || localStorage.getItem('k8s_dashboard_token');
 
 const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const token = getAuthToken();

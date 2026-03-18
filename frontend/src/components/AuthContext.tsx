@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth as useOidcAuth } from 'react-oidc-context';
+import { setAccessToken } from '@/auth/tokenStore';
 
 interface AuthContextType {
     isAuthenticated: boolean;
@@ -17,6 +18,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Map OIDC state to our existing AuthContext interface
     const isAuthenticated = auth.isAuthenticated;
     const token = auth.user?.access_token || null;
+
+    // Keep an in-memory token available before child queries start.
+    setAccessToken(token);
 
     useEffect(() => {
         // Automatically save token for easy testing if needed
