@@ -6,6 +6,7 @@ import { fetchAcceleratorTrends } from '@/api';
 import { Calendar, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { getEnv } from '@/config/env';
 
 export interface AcceleratorTrendData {
     deviceId: string;
@@ -15,7 +16,7 @@ export interface AcceleratorTrendData {
 }
 
 export default function AcceleratorTrendPage() {
-    const acceleratorMode = (import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU') as 'GPU' | 'NPU';
+    const acceleratorMode = getEnv('VITE_ACCELERATOR_TYPE', 'GPU') as 'GPU' | 'NPU';
     const isNpu = acceleratorMode === 'NPU';
     const primaryTitle = isNpu ? 'NPU' : 'GPU';
 

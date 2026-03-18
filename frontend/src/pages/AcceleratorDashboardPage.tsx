@@ -13,9 +13,10 @@ import { Search } from 'lucide-react';
 import { ClusterOverviewView } from '@/features/accelerator/components/ClusterOverviewView';
 import { HardwareDetailsView } from '@/features/accelerator/components/HardwareDetailsView';
 import { WorkloadMappingView } from '@/features/accelerator/components/WorkloadMappingView';
+import { getEnv } from '@/config/env';
 
 export default function AcceleratorDashboardPage() {
-    const acceleratorMode = (import.meta.env.VITE_ACCELERATOR_TYPE || 'GPU') as 'GPU' | 'NPU';
+    const acceleratorMode = getEnv('VITE_ACCELERATOR_TYPE', 'GPU') as 'GPU' | 'NPU';
     const isNpu = acceleratorMode === 'NPU';
 
     const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
