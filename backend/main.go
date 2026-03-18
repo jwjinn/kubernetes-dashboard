@@ -30,8 +30,14 @@ type app struct {
 	kubeClient     kubernetes.Interface
 	clusterCache   *clusterCache
 	responseCache  *ttlCache
+	observability  *observabilityClient
 	summaryTTL     time.Duration
 	topologyTTL    time.Duration
+	containersTTL  time.Duration
+	metricsTTL     time.Duration
+	acceleratorTTL time.Duration
+	logsTTL        time.Duration
+	tracesTTL      time.Duration
 	authEnabled    bool
 	allowedOrigin  string
 	tokenVerifier  *oidc.IDTokenVerifier
@@ -77,12 +83,18 @@ func main() {
 	}
 
 	application := &app{
-		kubeClient:    kubeClient,
-		authEnabled:   strings.EqualFold(os.Getenv("AUTH_ENABLED"), "true"),
-		allowedOrigin: envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
-		responseCache: newTTLCache(),
-		summaryTTL:    durationEnvOrDefault("SUMMARY_CACHE_TTL", 10*time.Second),
-		topologyTTL:   durationEnvOrDefault("TOPOLOGY_CACHE_TTL", 15*time.Second),
+		kubeClient:     kubeClient,
+		authEnabled:    strings.EqualFold(os.Getenv("AUTH_ENABLED"), "true"),
+		allowedOrigin:  envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		responseCache:  newTTLCache(),
+		observability:  newObservabilityClient(),
+		summaryTTL:     durationEnvOrDefault("SUMMARY_CACHE_TTL", 10*time.Second),
+		topologyTTL:    durationEnvOrDefault("TOPOLOGY_CACHE_TTL", 15*time.Second),
+		containersTTL:  10 * time.Second,
+		metricsTTL:     30 * time.Second,
+		acceleratorTTL: 15 * time.Second,
+		logsTTL:        5 * time.Second,
+		tracesTTL:      15 * time.Second,
 	}
 
 	cacheResync := durationEnvOrDefault("KUBERNETES_CACHE_RESYNC", 10*time.Minute)
@@ -105,6 +117,17 @@ func main() {
 	mux.HandleFunc("/api/clusters/summary", application.handleClusterSummary)
 	mux.HandleFunc("/api/topology", application.handleTopology)
 	mux.HandleFunc("/api/pods/", application.handlePods)
+	mux.HandleFunc("/api/k8s/containers", application.handleContainers)
+	mux.HandleFunc("/api/k8s/metrics/", application.handleK8sMetrics)
+	mux.HandleFunc("/api/gpu/devices", application.handleGPUDevices)
+	mux.HandleFunc("/api/gpu/trends", application.handleGPUTrends)
+	mux.HandleFunc("/api/npu/devices", application.handleNPUDevices)
+	mux.HandleFunc("/api/npu/trends", application.handleNPUTrends)
+	mux.HandleFunc("/api/npu/cluster-overview", application.handleNPUClusterOverview)
+	mux.HandleFunc("/api/npu/hardware-details", application.handleNPUHardwareDetails)
+	mux.HandleFunc("/api/npu/workload-mapping", application.handleNPUWorkloadMapping)
+	mux.HandleFunc("/api/logs", application.handleLogs)
+	mux.HandleFunc("/api/traces", application.handleTraces)
 
 	port := envOrDefault("PORT", defaultBackendPort)
 	addr := ":" + port

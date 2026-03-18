@@ -14,10 +14,10 @@ import (
 )
 
 type clusterCache struct {
-	factory     informers.SharedInformerFactory
-	nodeLister  corelisters.NodeLister
-	podLister   corelisters.PodLister
-	hasSynced   []cache.InformerSynced
+	factory    informers.SharedInformerFactory
+	nodeLister corelisters.NodeLister
+	podLister  corelisters.PodLister
+	hasSynced  []cache.InformerSynced
 }
 
 func newClusterCache(ctx context.Context, client kubernetes.Interface, resyncPeriod time.Duration) (*clusterCache, error) {
@@ -63,4 +63,8 @@ func (c *clusterCache) ListNodes() ([]*corev1.Node, error) {
 
 func (c *clusterCache) ListPods() ([]*corev1.Pod, error) {
 	return c.podLister.List(labels.Everything())
+}
+
+func (c *clusterCache) GetPod(namespace, name string) (*corev1.Pod, error) {
+	return c.podLister.Pods(namespace).Get(name)
 }

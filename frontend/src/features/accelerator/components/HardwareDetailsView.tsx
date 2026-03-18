@@ -86,83 +86,49 @@ export function HardwareDetailsView() {
     }, [topologyGroups]);
 
     const { utilData, tempData, vramData, powerData } = useMemo(() => {
-        const timeAxis = ['17:00', '17:10', '17:20', '17:30', '17:40', '17:50', '18:00', '18:10', '18:20', '18:30'];
+        const visibleDevices = selectedMapNode
+            ? devices.filter((device) => device.node === selectedMapNode)
+            : devices;
 
-        const genData = (base: number, volatility: number, seed: number) =>
-            Array.from({ length: 10 }).map((_, i) => Math.min(100, Math.max(0, base + Math.sin(i * seed) * volatility)));
-
-        const genVramData = (base: number, seed: number) =>
-            Array.from({ length: 10 }).map((_, i) => Math.max(0, base + Math.sin(i * seed) * 3000));
-
-        let utilSeries = [];
-        let tempSeries = [];
-        let vramSeries = [];
-        let powerSeries = [];
-
-        if (selectedMapNode) {
-            const seed = selectedMapNode.charCodeAt(selectedMapNode.length - 1);
-            utilSeries = [
-                { name: 'rbln0', type: 'line', data: genData(40, 40, seed), smooth: true, showSymbol: false },
-                { name: 'rbln4', type: 'line', data: genData(70, 30, seed + 1), smooth: true, showSymbol: false },
-            ];
-            tempSeries = [
-                { name: 'rbln0', type: 'line', data: genData(35, 10, seed), smooth: true, showSymbol: false },
-                { name: 'rbln4', type: 'line', data: genData(43, 15, seed + 1), smooth: true, showSymbol: false },
-            ];
-            vramSeries = [
-                { name: 'rbln0', type: 'line', data: genVramData(8192, seed), smooth: true, showSymbol: false },
-                { name: 'rbln4', type: 'line', data: genVramData(12288, seed + 1), smooth: true, showSymbol: false },
-            ];
-            powerSeries = [
-                { name: 'rbln0', type: 'line', data: genData(58, 5, seed), smooth: true, showSymbol: false },
-                { name: 'rbln4', type: 'line', data: genData(94, 2, seed + 1), smooth: true, showSymbol: false },
-            ];
-        } else {
-            const nodes = ['worker-01', 'worker-02'];
-            const baseUtils = [30, 80];
-            const baseTemps = [40, 32];
-            const baseVrams = [8192, 14000];
-            const basePowers = [58, 95];
-
-            utilSeries = nodes.map((node, idx) => ({
-                name: node, type: 'line', data: genData(baseUtils[idx], 20, idx + 1), smooth: true, showSymbol: false
-            }));
-
-            tempSeries = nodes.map((node, idx) => ({
-                name: node, type: 'line', data: genData(baseTemps[idx], 5, idx + 1), smooth: true, showSymbol: false
-            }));
-
-            vramSeries = nodes.map((node, idx) => ({
-                name: node, type: 'line', data: genVramData(baseVrams[idx], idx + 1), smooth: true, showSymbol: false
-            }));
-
-            powerSeries = nodes.map((node, idx) => ({
-                name: node, type: 'line', data: genData(basePowers[idx], 4, idx + 1), smooth: true, showSymbol: false
-            }));
-        }
-
-        const commonOptions = {
-            tooltip: { trigger: 'axis' as const },
-            grid: { left: '8%', right: '5%', bottom: '15%', top: '15%' },
-            xAxis: { type: 'category' as const, boundaryGap: false, data: timeAxis },
-            color: ['#10b981', '#059669', '#047857', '#065f46']
+        const labels = visibleDevices.map((device) => device.id);
+        const parseGiB = (value: string) => {
+            const numeric = Number.parseFloat(value.replace(/[^\d.]/g, ''));
+            return Number.isFinite(numeric) ? numeric : 0;
         };
+
+        const buildBarOption = (seriesName: string, values: number[], max?: number) => ({
+            tooltip: { trigger: 'axis' as const },
+            grid: { left: '8%', right: '5%', bottom: '20%', top: '12%' },
+            xAxis: {
+                type: 'category' as const,
+                data: labels,
+                axisLabel: { rotate: labels.length > 8 ? 35 : 0 },
+            },
+            yAxis: {
+                type: 'value' as const,
+                max,
+            },
+            color: ['#10b981'],
+            series: [
+                {
+                    name: seriesName,
+                    type: 'bar' as const,
+                    data: values,
+                    itemStyle: {
+                        borderRadius: [6, 6, 0, 0],
+                        color: '#10b981',
+                    },
+                },
+            ],
+        });
 
         return {
-            utilData: { ...commonOptions, yAxis: { type: 'value' as const, max: 100 }, series: utilSeries },
-            tempData: { 
-                ...commonOptions, 
-                yAxis: { type: 'value' as const, max: 100 }, 
-                series: tempSeries
-            },
-            vramData: { ...commonOptions, yAxis: { type: 'value' as const }, series: vramSeries },
-            powerData: { 
-                ...commonOptions, 
-                yAxis: { type: 'value' as const, max: 120 }, 
-                series: powerSeries
-            }
+            utilData: buildBarOption('Utilization (%)', visibleDevices.map((device) => device.utilization), 100),
+            tempData: buildBarOption('Temperature (°C)', visibleDevices.map((device) => device.temperature), 100),
+            vramData: buildBarOption('Memory Usage (GiB)', visibleDevices.map((device) => parseGiB(device.vramUsage))),
+            powerData: buildBarOption('Power (W)', visibleDevices.map((device) => device.power ?? 0), 150),
         };
-    }, [selectedMapNode]);
+    }, [devices, selectedMapNode]);
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
