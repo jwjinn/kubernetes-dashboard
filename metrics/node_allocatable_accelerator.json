@@ -1,0 +1,1 @@
+{"status":"success","isPartial":false,"data":{"resultType":"vector","result":[{"metric":{"node":"worker-01","resource":"rebellions_ai_ATOM_CA25"},"value":[1773816178,"8"]},{"metric":{"node":"worker-02","resource":"rebellions_ai_ATOM_CA25"},"value":[1773816178,"8"]}]},"stats":{"seriesFetched": "2","executionTimeMsec":25}}
