@@ -169,6 +169,13 @@ func newKubernetesClient() (kubernetes.Interface, error) {
 
 func newOIDCVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
 	issuerURL := envOrDefault("OIDC_ISSUER_URL", "http://localhost:8080/realms/dashboard-realm")
+	jwksURL := strings.TrimSpace(os.Getenv("OIDC_JWKS_URL"))
+
+	if jwksURL != "" {
+		keySet := oidc.NewRemoteKeySet(ctx, jwksURL)
+		return oidc.NewVerifier(issuerURL, keySet, &oidc.Config{SkipClientIDCheck: true}), nil
+	}
+
 	discoveryURL := envOrDefault("OIDC_DISCOVERY_URL", issuerURL)
 
 	discoveryCtx := ctx
