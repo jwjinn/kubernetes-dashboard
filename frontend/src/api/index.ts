@@ -101,6 +101,47 @@ export const fetchContainerMap = async () => {
     return response.json();
 };
 
+export interface NodeDashboardNode {
+    nodeId: string;
+    cpuUtil: number;
+    memTotal: number;
+    memUsed: number;
+    memBuffers: number;
+    memCached: number;
+    diskReads: number;
+    diskWrites: number;
+    fsUsedPercent: number;
+    netRx: number;
+    netTx: number;
+    tcpEstablished: number;
+    load1m: number;
+    load5m: number;
+    load15m: number;
+    status: 'Ready' | 'NotReady';
+}
+
+export interface NodeDashboardSeries {
+    nodeId: string;
+    values: number[];
+}
+
+export interface NodeDashboardResponse {
+    nodes: NodeDashboardNode[];
+    timeAxis: string[];
+    cpuSeries: NodeDashboardSeries[];
+    memorySeries: NodeDashboardSeries[];
+    diskIoSeries: NodeDashboardSeries[];
+    networkIoSeries: NodeDashboardSeries[];
+    loadSeries: NodeDashboardSeries[];
+    tcpSeries: NodeDashboardSeries[];
+}
+
+export const fetchNodeDashboardMetrics = async (clusterId: string): Promise<NodeDashboardResponse> => {
+    const response = await apiFetch(`/api/k8s/node-metrics?cluster=${clusterId}`);
+    if (!response.ok) throw new Error('Failed to fetch node dashboard metrics');
+    return response.json();
+};
+
 export const fetchContainerMetrics = async (containerId: string) => {
     const response = await apiFetch(`/api/k8s/metrics/${containerId}`);
     if (!response.ok) throw new Error('Failed to fetch container metrics');
