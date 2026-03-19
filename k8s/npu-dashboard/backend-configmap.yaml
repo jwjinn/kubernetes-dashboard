@@ -17,10 +17,28 @@ data:
   LOGS_BASE_URL: "http://victoria-logs-single-server.observability.svc.cluster.local:9428"
   TRACES_BASE_URL: "http://victoria-traces-vtc-vtselect.observability.svc.cluster.local:10471"
   METRICS_BASE_URL: "http://vmselect-vm.observability.svc.cluster.local:8481"
+  # Node Dashboard metric source settings.
+  # NODE_METRICS_JOB:
+  #   Prometheus/VictoriaMetrics job label used for node-level metrics.
+  #   Example: node-exporter, prometheus-node-exporter
   NODE_METRICS_JOB: "node-exporter"
+  # NODE_METRICS_MAPPING_STRATEGY:
+  #   auto           -> try kube_pod_info mapping first, then fall back to node_uname_info
+  #   kube_pod_info  -> map instance to node via kube-state-metrics pod metadata
+  #   node_uname_info-> map instance to node via node_uname_info.nodename
+  #   instance       -> do not remap; use the instance host as the node key
   NODE_METRICS_MAPPING_STRATEGY: "auto"
+  # NODE_METRICS_POD_NAMESPACE:
+  #   Namespace where the node metrics exporter pods run.
+  #   Used only for kube_pod_info-based mapping.
   NODE_METRICS_POD_NAMESPACE: "monitoring"
+  # NODE_METRICS_POD_NAME_REGEX:
+  #   Regex for matching node metrics exporter pod names in kube_pod_info.
+  #   Change this if your DaemonSet pod names differ from node-exporter-*.
   NODE_METRICS_POD_NAME_REGEX: "node-exporter-.*"
+  # NODE_METRICS_POD_INFO_METRIC:
+  #   kube-state-metrics metric used for pod -> node mapping.
+  #   Usually kube_pod_info unless your environment exposes a different metric.
   NODE_METRICS_POD_INFO_METRIC: "kube_pod_info"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-collector.observability.svc.cluster.local:4318"
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
