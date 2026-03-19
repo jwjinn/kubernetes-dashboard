@@ -64,7 +64,7 @@ export default function ContainerMapPage() {
                                     <ul className="list-disc ml-4 space-y-1">
                                         <li>각 블록은 하나의 파드를 의미합니다.</li>
                                         <li>보라색 카드는 {acceleratorMode} 요청 파드, 초록색 카드는 CPU 전용 파드입니다.</li>
-                                        <li>노란 표시는 경고 상태, 빨간 표시는 실패 상태입니다.</li>
+                                        <li>주황색 카드는 경고 상태, 빨간색 카드는 실패 상태입니다.</li>
                                         <li>{acceleratorMode} 파드는 CPU, MEM, 그리고 노드 기준 {acceleratorMode} 관측 활성도를 함께 보여줍니다.</li>
                                     </ul>
                                 </div>
@@ -80,11 +80,11 @@ export default function ContainerMapPage() {
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded-sm bg-emerald-500"></div>
-                                <span className="text-muted-foreground">CPU-only workload</span>
+                                <span className="text-muted-foreground">CPU Pod</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                                <div className="w-3 h-3 rounded-sm bg-yellow-400"></div>
-                                <span className="text-muted-foreground">Warning: restart / not ready / pending</span>
+                                <div className="w-3 h-3 rounded-sm bg-amber-400"></div>
+                                <span className="text-muted-foreground">Warning Pod</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded-sm bg-red-500"></div>

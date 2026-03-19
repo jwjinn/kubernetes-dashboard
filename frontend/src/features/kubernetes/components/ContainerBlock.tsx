@@ -48,6 +48,7 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
 
     const getCardColor = () => {
         if (isFailed) return 'bg-red-50 border-red-500 text-red-950';
+        if (isWarning) return 'bg-amber-100 border-amber-500 text-amber-950';
         if (isNpu) return 'bg-indigo-100 border-indigo-400 text-indigo-950';
         return 'bg-emerald-100 border-emerald-400 text-emerald-950';
     };
@@ -80,7 +81,7 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
                         onMouseLeave={() => onHover?.(null)}
                         className={cn(
                             "cursor-pointer rounded-md border p-2 flex flex-col justify-between transition-all duration-200 shadow-sm",
-                            "w-32 h-32 relative overflow-hidden group mb-1",
+                            "w-36 h-36 relative overflow-hidden group mb-1",
                             getCardColor(),
                             isHighlighted && "ring-4 ring-primary ring-offset-2 scale-105 z-10 shadow-lg",
                             isDimmed && "opacity-40 grayscale-[0.5]"
@@ -101,9 +102,7 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
                             <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold", statusBadge.className)}>
                                 {statusBadge.label}
                             </span>
-                            {isWarning && (
-                                <span className="text-[9px] font-semibold text-amber-700">Needs attention</span>
-                            )}
+                            {isWarning && <Info className="w-3 h-3 text-amber-700" />}
                         </div>
 
                         {data.hasTrace && (
@@ -141,9 +140,7 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="mt-1 text-[9px] font-semibold text-emerald-800/80">
-                                        CPU-only workload
-                                    </div>
+                                    <div className="mt-1 text-[9px] font-semibold text-emerald-800/80">CPU</div>
                                 )}
                             </div>
                         </div>

@@ -72,10 +72,10 @@ export function WorkloadMappingView() {
                     <div>
                         <div className="flex items-center mb-1">
                             <Text className="font-bold text-foreground">구동 중인 NPU 프로세스</Text>
-                            <InfoTooltip content="rbln-smi 로그를 통해 추적가능한 현재 작동 중인 AI 프로세스(PID)의 수입니다. 파드는 삭제되었지만 프로세스가 남은 '좀비 프로세스' 여부를 교차 검증할 수 있습니다." />
+                            <InfoTooltip content="실제 PID를 직접 수집하는 표가 아니라, 장치 telemetry 상에서 메모리 점유나 사용률이 관측된 NPU device row 수를 요약한 값입니다." />
                         </div>
                         <Metric className="text-4xl font-black text-foreground">{contexts.length}</Metric>
-                        <Text className="text-xs text-muted-foreground mt-2">Identified via rbln-smi context</Text>
+                        <Text className="text-xs text-muted-foreground mt-2">Telemetry-observed active device rows</Text>
                     </div>
                 </Card>
             </div>
@@ -131,9 +131,9 @@ export function WorkloadMappingView() {
                     <div>
                         <div className="flex items-center">
                             <h3 className="font-bold text-sm">NPU 프로세스 상세 컨텍스트 정보 (rbln-smi)</h3>
-                            <InfoTooltip content="워커 노드별 물리 NPU 칩(deviceIdx) 내부에서 실제로 동작 중인 프로세스의 PID, 상태, 메모리 할당량(Memalloc)을 나타냅니다. 파드 레벨에서는 알 수 없는 디바이스의 세부 상태를 진단할 때 필수적인 창입니다." />
+                            <InfoTooltip content="이 표는 실제 OS PID 목록이 아니라, exporter telemetry 기준으로 어떤 Pod/컨테이너 라벨이 어떤 NPU device와 함께 관측되었는지 보여줍니다. 상태(Status)는 장치 telemetry 기준이며 `연산 중` 또는 `메모리 점유` 값을 가질 수 있습니다." />
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">Real-time driver context extracted from rbln-smi on hosts.</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Telemetry-based device context observed from NPU metrics.</p>
                     </div>
                 </div>
                 <div className="w-full max-h-[400px] overflow-auto">
@@ -142,32 +142,34 @@ export function WorkloadMappingView() {
                             <tr>
                                 <th className="px-4 py-3 font-bold">Node</th>
                                 <th className="px-4 py-3 font-bold">Device</th>
-                                <th className="px-4 py-3 font-bold">PID</th>
-                                <th className="px-4 py-3 font-bold">Process</th>
-                                <th className="px-4 py-3 font-bold">Priority</th>
+                                <th className="px-4 py-3 font-bold">Pod</th>
+                                <th className="px-4 py-3 font-bold">Container</th>
                                 <th className="px-4 py-3 font-bold">Status</th>
-                                <th className="px-4 py-3 font-bold text-right">Memalloc</th>
+                                <th className="px-4 py-3 font-bold text-right">Memory Usage</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {isLoading ? (
-                                <tr><td colSpan={7} className="text-center py-6 text-muted-foreground animate-pulse">Loading data...</td></tr>
+                                <tr><td colSpan={6} className="text-center py-6 text-muted-foreground animate-pulse">Loading data...</td></tr>
                             ) : contexts.length === 0 ? (
-                                <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">No active NPU processes found.</td></tr>
+                                <tr><td colSpan={6} className="text-center py-6 text-muted-foreground">No active NPU telemetry rows found.</td></tr>
                             ) : (
                                 contexts.map((ctx: any, idx: number) => (
-                                    <tr key={`${ctx.pid}-${idx}`} className="hover:bg-muted/50 transition-colors">
+                                    <tr key={`${ctx.node}-${ctx.deviceIdx}-${idx}`} className="hover:bg-muted/50 transition-colors">
                                         <td className="px-4 py-3 font-mono text-muted-foreground">{ctx.node}</td>
                                         <td className="px-4 py-3 font-mono text-foreground font-medium">{ctx.deviceIdx}</td>
-                                        <td className="px-4 py-3 font-mono text-blue-600 dark:text-blue-400">{ctx.pid}</td>
+                                        <td className="px-4 py-3">
+                                            <span className="font-medium text-foreground">{ctx.podName}</span>
+                                        </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                                {ctx.processName}
+                                                {ctx.containerName}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3">{ctx.priority}</td>
-                                        <td className="px-4 py-3 text-muted-foreground">{ctx.status}</td>
+                                        <td className="px-4 py-3 text-muted-foreground">
+                                            {ctx.status === 'Compute' ? '연산 중' : ctx.status === 'Memory Resident' ? '메모리 점유' : ctx.status === 'Error' ? '오류' : '유휴'}
+                                        </td>
                                         <td className="px-4 py-3 text-right font-mono text-foreground">{ctx.memalloc}</td>
                                     </tr>
                                 ))

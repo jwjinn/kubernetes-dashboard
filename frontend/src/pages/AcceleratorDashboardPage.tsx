@@ -159,7 +159,7 @@ export default function AcceleratorDashboardPage() {
                         </TabsList>
                         
                         <TabsContent value="overview">
-                            <ClusterOverviewView />
+                            <ClusterOverviewView onOpenTab={(tab) => setActiveTab(tab)} />
                         </TabsContent>
 
                         <TabsContent value="hardware">
