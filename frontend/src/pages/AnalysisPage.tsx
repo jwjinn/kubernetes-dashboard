@@ -190,7 +190,7 @@ export default function AnalysisPage() {
 
             {/* Manifest Dialog */}
             <Dialog open={isManifestOpen} onOpenChange={setIsManifestOpen}>
-                <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col p-0 overflow-hidden bg-[#1e1e1e] border-indigo-500/30 text-indigo-100">
+                <DialogContent className="max-h-[80vh] max-w-3xl flex flex-col overflow-hidden p-0 bg-[#1e1e1e] border-indigo-500/30 text-indigo-100">
                     <DialogHeader className="p-6 border-b border-indigo-500/20 shrink-0">
                         <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
                             <FileText className="w-5 h-5 text-indigo-400" /> {selectedPod?.name} Manifest
@@ -199,11 +199,12 @@ export default function AnalysisPage() {
                             Kubernetes Object YAML 정의문
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex-1 overflow-auto p-6 font-mono text-[13px] leading-relaxed relative">
-                        <button
-                            className="absolute top-4 right-6 p-2 hover:bg-white/10 rounded-md transition-colors text-indigo-300"
-                            onClick={() => {
-                                const yaml = `apiVersion: v1
+                    <div className="min-h-0 flex-1 overflow-y-auto">
+                        <div className="relative p-6 font-mono text-[13px] leading-relaxed">
+                            <button
+                                className="sticky top-0 float-right z-10 rounded-md p-2 text-indigo-300 transition-colors hover:bg-white/10"
+                                onClick={() => {
+                                    const yaml = `apiVersion: v1
 kind: Pod
 metadata:
   name: ${selectedPod?.name}
@@ -216,14 +217,14 @@ spec:
     image: ${selectedPod?.image}
     ports:
     - containerPort: 80`;
-                                navigator.clipboard.writeText(yaml);
-                                alert('YAML이 클립보드에 복사되었습니다.');
-                            }}
-                        >
-                            Copy YAML
-                        </button>
-                        <pre className="text-indigo-200">
-                            {`apiVersion: v1
+                                    navigator.clipboard.writeText(yaml);
+                                    alert('YAML이 클립보드에 복사되었습니다.');
+                                }}
+                            >
+                                Copy YAML
+                            </button>
+                            <pre className="clear-both whitespace-pre-wrap break-words text-indigo-200">
+                                {`apiVersion: v1
 kind: Pod
 metadata:
   name: ${selectedPod?.name}
@@ -243,7 +244,8 @@ spec:
       requests:
         cpu: "0.5"
         memory: "512Mi"`}
-                        </pre>
+                            </pre>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>
