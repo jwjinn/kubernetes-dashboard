@@ -151,7 +151,7 @@ export function AcceleratorDetailsSheet({ isOpen, deviceId, acceleratorType, onC
                                     </div>
                                     <div className="space-y-1 col-span-2">
                                         <Text className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-2">
-                                            <Tag className="w-3 h-3" /> Running Pod
+                                            <Tag className="w-3 h-3" /> Observed Pod Label
                                         </Text>
                                         <Text className={`text-sm font-medium ${isNpu ? 'text-green-600' : 'text-blue-600'}`}>
                                             {device.pod || 'N/A'}

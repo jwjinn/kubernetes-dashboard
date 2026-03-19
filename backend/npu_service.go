@@ -65,8 +65,9 @@ type nodeAllocationRow struct {
 }
 
 type npuHardwareDetails struct {
-	Devices  []acceleratorDevice `json:"devices"`
-	Topology []npuTopologyGroup  `json:"topology"`
+	Devices        []acceleratorDevice `json:"devices"`
+	Topology       []npuTopologyGroup  `json:"topology"`
+	NodeAllocation []nodeAllocationRow `json:"nodeAllocation"`
 }
 
 type npuTopologyGroup struct {
@@ -168,8 +169,9 @@ func (a *app) handleNPUHardwareDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, npuHardwareDetails{
-		Devices:  snapshot.Devices,
-		Topology: snapshot.Topology,
+		Devices:        snapshot.Devices,
+		Topology:       snapshot.Topology,
+		NodeAllocation: snapshot.Overview.NodeAllocation,
 	})
 }
 
@@ -309,15 +311,8 @@ func mergeNPUDeviceStates(metrics npuMetricSet) []npuDeviceState {
 
 func buildNPUSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, states []npuDeviceState, trends map[string][]int) *npuSnapshot {
 	podIndex := indexPodsByNamespaceAndName(pods)
-	nodeInfo := make(map[string]corev1.Node, len(nodes))
-	for _, node := range nodes {
-		nodeInfo[node.Name] = *node
-	}
 
 	devices := make([]acceleratorDevice, 0, len(states))
-	nodeAllocationMap := map[string]*nodeAllocationRow{}
-	hardwareByNode := map[string]hardwareVersion{}
-	podMappings := map[string]*podMappingRow{}
 	contexts := make([]processRow, 0)
 
 	for _, state := range states {
@@ -351,44 +346,12 @@ func buildNPUSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, states []npuDevi
 
 		devices = append(devices, device)
 
-		row := nodeAllocationMap[state.Hostname]
-		if row == nil {
-			row = &nodeAllocationRow{Node: state.Hostname}
-			nodeAllocationMap[state.Hostname] = row
-		}
-		row.Capacity++
-		if state.Pod != "" {
-			row.Allocated++
-		}
-
-		node := nodeInfo[state.Hostname]
-		hardwareByNode[state.Hostname] = hardwareVersion{
-			Node:          state.Hostname,
-			DriverVersion: firstNonEmpty(state.DriverVersion, npuDriverVersionOverride(), node.Labels["rebellions.ai/driver-version"], "unknown"),
-			Family:        defaultNPUFamily,
-			Product:       firstNonEmpty(state.Card, node.Labels["rebellions.ai/product"], defaultNPUCardName),
-		}
-
-		if state.Pod != "" && state.Namespace != "" {
-			key := state.Namespace + "/" + state.Pod
-			mapping := podMappings[key]
-			if mapping == nil {
-				mapping = &podMappingRow{
-					PodName: state.Pod,
-					Node:    state.Hostname,
-				}
-				if pod != nil {
-					mapping.Requested = acceleratorRequestCount(pod, "NPU")
-				}
-				podMappings[key] = mapping
-			}
-			mapping.Devices = append(mapping.Devices, state.Name)
-
+		if isTelemetryActive(state) {
 			contexts = append(contexts, processRow{
 				PID:         "-",
 				ProcessName: emptyAsDash(state.Container),
-				Priority:    "Normal",
-				Status:      device.Status,
+				Priority:    "Telemetry",
+				Status:      telemetryStatus(state),
 				Memalloc:    bytesToGiBString(state.DramUsedBytes),
 				Node:        state.Hostname,
 				DeviceIdx:   state.Name,
@@ -396,54 +359,105 @@ func buildNPUSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, states []npuDevi
 		}
 	}
 
-	nodeAllocation := make([]nodeAllocationRow, 0, len(nodeAllocationMap))
-	for _, row := range nodeAllocationMap {
-		nodeAllocation = append(nodeAllocation, *row)
-	}
-	sort.Slice(nodeAllocation, func(i, j int) bool { return nodeAllocation[i].Node < nodeAllocation[j].Node })
-
-	hardwareVersions := make([]hardwareVersion, 0, len(hardwareByNode))
-	for _, row := range hardwareByNode {
-		hardwareVersions = append(hardwareVersions, row)
-	}
-	sort.Slice(hardwareVersions, func(i, j int) bool { return hardwareVersions[i].Node < hardwareVersions[j].Node })
-
-	podMappingRows := make([]podMappingRow, 0, len(podMappings))
-	for _, mapping := range podMappings {
-		sort.Strings(mapping.Devices)
-		if mapping.Requested == 0 {
-			mapping.Requested = len(mapping.Devices)
-		}
-		podMappingRows = append(podMappingRows, *mapping)
-	}
-	sort.Slice(podMappingRows, func(i, j int) bool { return podMappingRows[i].PodName < podMappingRows[j].PodName })
-
 	sort.Slice(contexts, func(i, j int) bool {
 		if contexts[i].Node == contexts[j].Node {
 			return contexts[i].DeviceIdx < contexts[j].DeviceIdx
 		}
 		return contexts[i].Node < contexts[j].Node
 	})
+	overview := buildNPUOverview(nodes, pods)
+	podMappingRows := buildNPUPodMappings(pods)
+
+	return &npuSnapshot{
+		Devices:       devices,
+		PodMappings:   podMappingRows,
+		Contexts:      contexts,
+		Overview:      overview,
+		Topology:      buildNPUTopology(devices),
+		TrendByDevice: trends,
+	}
+}
+
+func buildNPUPodMappings(pods []*corev1.Pod) []podMappingRow {
+	rows := make([]podMappingRow, 0)
+	for _, pod := range pods {
+		if !shouldCountPodForNodeAllocation(pod) {
+			continue
+		}
+		requested := acceleratorRequestCount(pod, "NPU")
+		if requested == 0 {
+			continue
+		}
+		rows = append(rows, podMappingRow{
+			PodName:   pod.Name,
+			Node:      pod.Spec.NodeName,
+			Requested: requested,
+			Devices:   []string{},
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Node == rows[j].Node {
+			return rows[i].PodName < rows[j].PodName
+		}
+		return rows[i].Node < rows[j].Node
+	})
+	return rows
+}
+
+func buildNPUOverview(nodes []*corev1.Node, pods []*corev1.Pod) npuClusterOverview {
+	nodeAllocation := make([]nodeAllocationRow, 0)
+	hardwareVersions := make([]hardwareVersion, 0)
+	allocationsByNode := make(map[string]int)
+
+	for _, pod := range pods {
+		if !shouldCountPodForNodeAllocation(pod) {
+			continue
+		}
+		requested := acceleratorRequestCount(pod, "NPU")
+		if requested == 0 {
+			continue
+		}
+		allocationsByNode[pod.Spec.NodeName] += requested
+	}
 
 	totalCapacity := 0
 	totalAllocated := 0
-	for _, row := range nodeAllocation {
-		totalCapacity += row.Capacity
-		totalAllocated += row.Allocated
+	for _, node := range nodes {
+		capacity := acceleratorCapacity(node.Status.Allocatable, "NPU")
+		if capacity == 0 {
+			continue
+		}
+
+		allocated := allocationsByNode[node.Name]
+		if allocated > capacity {
+			allocated = capacity
+		}
+
+		nodeAllocation = append(nodeAllocation, nodeAllocationRow{
+			Node:      node.Name,
+			Allocated: allocated,
+			Capacity:  capacity,
+		})
+		hardwareVersions = append(hardwareVersions, hardwareVersion{
+			Node:          node.Name,
+			DriverVersion: firstNonEmpty(npuDriverVersionOverride(), node.Labels["rebellions.ai/driver-version"], "unknown"),
+			Family:        firstNonEmpty(node.Labels["rebellions.ai/family"], defaultNPUFamily),
+			Product:       firstNonEmpty(node.Labels["rebellions.ai/product"], defaultNPUCardName),
+		})
+
+		totalCapacity += capacity
+		totalAllocated += allocated
 	}
 
-	return &npuSnapshot{
-		Devices:     devices,
-		PodMappings: podMappingRows,
-		Contexts:    contexts,
-		Overview: npuClusterOverview{
-			TotalCapacity:    totalCapacity,
-			Allocated:        totalAllocated,
-			HardwareVersions: hardwareVersions,
-			NodeAllocation:   nodeAllocation,
-		},
-		Topology:      buildNPUTopology(devices),
-		TrendByDevice: trends,
+	sort.Slice(nodeAllocation, func(i, j int) bool { return nodeAllocation[i].Node < nodeAllocation[j].Node })
+	sort.Slice(hardwareVersions, func(i, j int) bool { return hardwareVersions[i].Node < hardwareVersions[j].Node })
+
+	return npuClusterOverview{
+		TotalCapacity:    totalCapacity,
+		Allocated:        totalAllocated,
+		HardwareVersions: hardwareVersions,
+		NodeAllocation:   nodeAllocation,
 	}
 }
 
@@ -599,10 +613,27 @@ func npuDeviceStatus(state npuDeviceState) string {
 	if state.Health > 0 {
 		return "Error"
 	}
-	if state.Pod == "" {
-		return "Idle"
+	if isTelemetryActive(state) {
+		return "Active"
 	}
-	return "Active"
+	return "Idle"
+}
+
+func telemetryStatus(state npuDeviceState) string {
+	if state.Health > 0 {
+		return "Error"
+	}
+	if state.Utilization > 0 {
+		return "Compute"
+	}
+	if state.DramUsedBytes > 0 {
+		return "Memory Resident"
+	}
+	return "Idle"
+}
+
+func isTelemetryActive(state npuDeviceState) bool {
+	return state.Utilization > 0 || state.DramUsedBytes > 0
 }
 
 func indexPodsByNamespaceAndName(pods []*corev1.Pod) map[string]*corev1.Pod {
@@ -655,6 +686,31 @@ func syntheticHistory(seed string, base, count int) []int {
 		history = append(history, clampInt(value, 0, 100))
 	}
 	return history
+}
+
+func acceleratorCapacity(resources corev1.ResourceList, mode string) int {
+	total := 0
+	for resourceName, quantity := range resources {
+		if isAcceleratorResource(string(resourceName), mode) {
+			total += int(quantity.Value())
+		}
+	}
+	return total
+}
+
+func shouldCountPodForNodeAllocation(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+	if strings.TrimSpace(pod.Spec.NodeName) == "" {
+		return false
+	}
+	switch pod.Status.Phase {
+	case corev1.PodSucceeded, corev1.PodFailed:
+		return false
+	default:
+		return true
+	}
 }
 
 func acceleratorRequestCount(pod *corev1.Pod, mode string) int {

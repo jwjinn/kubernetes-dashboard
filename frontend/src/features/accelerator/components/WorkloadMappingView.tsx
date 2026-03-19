@@ -27,7 +27,7 @@ export function WorkloadMappingView() {
         },
         series: [
             {
-                name: 'Allocated Devices',
+                name: 'Requested NPU',
                 type: 'bar',
                 stack: 'total',
                 label: { show: true },
@@ -63,10 +63,10 @@ export function WorkloadMappingView() {
                     <div>
                         <div className="flex items-center mb-1">
                             <Text className="font-bold text-foreground">활성 파드 맵핑 (Active Pods)</Text>
-                            <InfoTooltip content="현재 NPU를 할당받아 점유하고 있는 파드의 총 개수입니다." />
+                            <InfoTooltip content="현재 Kubernetes 스펙상 NPU requests가 설정된 파드의 총 개수입니다." />
                         </div>
                         <Metric className="text-4xl font-black text-green-500">{podMappings.length}</Metric>
-                        <Text className="text-xs text-muted-foreground mt-2">Pods requesting NPU resources</Text>
+                        <Text className="text-xs text-muted-foreground mt-2">Pods with NPU requests in spec</Text>
                     </div>
                     <div className="w-full h-px bg-border"></div>
                     <div>
@@ -85,7 +85,7 @@ export function WorkloadMappingView() {
                 <div className="px-4 py-3 border-b border-border bg-muted/20 flex justify-between items-center">
                     <div className="flex items-center">
                         <h3 className="font-bold text-sm">파드 ↔ K8s 호스트 노드 매핑 현황</h3>
-                        <InfoTooltip content="Kubernetes API의 Pod 스펙 정보와 할당받은 NPU 호스트 정보를 조인(Join)하여, 어떤 파드가 어느 노드에서 몇 개의 NPU를 사용 중인지 명확하게 나열합니다." />
+                        <InfoTooltip content="Kubernetes API의 Pod 스펙과 스케줄링 정보를 기준으로, 어떤 파드가 어느 노드에 배치되었고 몇 개의 NPU를 요청했는지 보여줍니다. 개별 디바이스 이름과의 직접 매핑은 현재 telemetry만으로는 확정할 수 없습니다." />
                     </div>
                     <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">From Kubernetes API</span>
                 </div>
@@ -96,7 +96,7 @@ export function WorkloadMappingView() {
                                 <th className="px-4 py-3 font-bold">Pod Name</th>
                                 <th className="px-4 py-3 font-bold">Node</th>
                                 <th className="px-4 py-3 font-bold text-center">Req NPU Count</th>
-                                <th className="px-4 py-3 font-bold">Allocated Devices</th>
+                                <th className="px-4 py-3 font-bold">Allocation Source</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -113,13 +113,9 @@ export function WorkloadMappingView() {
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex gap-1.5 flex-wrap">
-                                                {mapping.devices.map((d: string) => (
-                                                    <span key={d} className="px-2 py-0.5 text-xs bg-muted border border-border rounded-md font-mono text-muted-foreground">
-                                                        {d}
-                                                    </span>
-                                                ))}
-                                            </div>
+                                            <span className="px-2 py-1 text-xs bg-muted border border-border rounded-md text-muted-foreground">
+                                                Kubernetes Pod request ({mapping.requested})
+                                            </span>
                                         </td>
                                     </tr>
                                 ))

@@ -75,6 +75,15 @@ export function HardwareDetailsView() {
 
     const devices: NpuDevice[] = hardwareDetails?.devices || [];
     const topologyGroups = hardwareDetails?.topology || [];
+    const nodeAllocation = hardwareDetails?.nodeAllocation || [];
+
+    const nodeAllocationMap = useMemo(() => {
+        const summary: Record<string, { allocated: number; capacity: number }> = {};
+        nodeAllocation.forEach((row: any) => {
+            summary[row.node] = { allocated: row.allocated, capacity: row.capacity };
+        });
+        return summary;
+    }, [nodeAllocation]);
 
     const groupedTopology = useMemo(() => {
         const groups: Record<string, any[]> = {};
@@ -84,6 +93,25 @@ export function HardwareDetailsView() {
         });
         return groups;
     }, [topologyGroups]);
+
+    const nodeTelemetrySummary = useMemo(() => {
+        const summary: Record<string, { active: number; total: number; memoryResident: number; computeActive: number }> = {};
+        devices.forEach((device) => {
+            if (!summary[device.node]) {
+                summary[device.node] = { active: 0, total: 0, memoryResident: 0, computeActive: 0 };
+            }
+            summary[device.node].total += 1;
+
+            const memoryUsed = Number.parseFloat((device.vramUsage || '0').replace(/[^\d.]/g, ''));
+            const hasMemory = Number.isFinite(memoryUsed) && memoryUsed > 0;
+            const hasCompute = (device.utilization ?? 0) > 0;
+
+            if (hasMemory || hasCompute) summary[device.node].active += 1;
+            if (hasMemory) summary[device.node].memoryResident += 1;
+            if (hasCompute) summary[device.node].computeActive += 1;
+        });
+        return summary;
+    }, [devices]);
 
     const { utilData, tempData, vramData, powerData } = useMemo(() => {
         const visibleDevices = selectedMapNode
@@ -132,6 +160,91 @@ export function HardwareDetailsView() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
+            <Card className="p-4 border-border shadow-sm bg-muted/10">
+                <div className="flex items-center mb-2">
+                    <h3 className="font-bold text-sm">이 화면을 읽는 기준</h3>
+                    <InfoTooltip content="Requested는 Kubernetes Node/Pod 정보에서 계산한 공식 스케줄링 값입니다. Telemetry Active는 Prometheus에서 수집한 device 상태값(Utilization 또는 Memory Usage) 기준입니다." />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="font-semibold text-foreground">Requested</p>
+                        <p className="mt-1 text-muted-foreground">출처: Kubernetes API</p>
+                        <p className="mt-1 text-muted-foreground">기준: Pod `resources.requests` 합계</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="font-semibold text-foreground">Telemetry Active</p>
+                        <p className="mt-1 text-muted-foreground">출처: Prometheus / VictoriaMetrics</p>
+                        <p className="mt-1 text-muted-foreground">기준: `Utilization &gt; 0` 또는 `Memory Usage &gt; 0`</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="font-semibold text-foreground">왜 다를 수 있나</p>
+                        <p className="mt-1 text-muted-foreground">모델만 올라가 있고 지금 연산이 없으면 Requested는 존재하지만 타일 색은 약하거나 회색일 수 있습니다.</p>
+                    </div>
+                </div>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(nodeAllocationMap).map(([nodeName, allocation]) => {
+                    const telemetry = nodeTelemetrySummary[nodeName] ?? { active: 0, total: 0, memoryResident: 0, computeActive: 0 };
+                    const requestRatio = allocation.capacity > 0 ? Math.round((allocation.allocated / allocation.capacity) * 100) : 0;
+                    const telemetryRatio = telemetry.total > 0 ? Math.round((telemetry.active / telemetry.total) * 100) : 0;
+
+                    return (
+                        <Card key={nodeName} className="p-4 border-border shadow-sm">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="font-bold text-base">{nodeName}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Kubernetes 요청량과 실제 장치 telemetry를 나란히 보여줍니다.
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[11px] uppercase text-muted-foreground">Capacity</p>
+                                    <p className="text-lg font-black">{allocation.capacity}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mt-4">
+                                <div className="rounded-lg border border-green-200 bg-green-50/60 p-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-green-800">Requested</span>
+                                        <span className="text-xs text-green-700">{requestRatio}%</span>
+                                    </div>
+                                    <div className="mt-2 text-2xl font-black text-green-700">
+                                        {allocation.allocated} / {allocation.capacity}
+                                    </div>
+                                    <p className="mt-1 text-xs text-green-700">
+                                        Source: Kubernetes Pod requests
+                                    </p>
+                                </div>
+
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-emerald-800">Telemetry Active</span>
+                                        <span className="text-xs text-emerald-700">{telemetryRatio}%</span>
+                                    </div>
+                                    <div className="mt-2 text-2xl font-black text-emerald-700">
+                                        {telemetry.active} / {telemetry.total || allocation.capacity}
+                                    </div>
+                                    <p className="mt-1 text-xs text-emerald-700">
+                                        Source: device metrics
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                                <div className="rounded-md bg-muted/40 px-3 py-2">
+                                    Compute Active: <span className="font-semibold text-foreground">{telemetry.computeActive}</span>
+                                </div>
+                                <div className="rounded-md bg-muted/40 px-3 py-2">
+                                    Memory Resident: <span className="font-semibold text-foreground">{telemetry.memoryResident}</span>
+                                </div>
+                            </div>
+                        </Card>
+                    );
+                })}
+            </div>
+
             {/* HexMap and Topology */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="col-span-1 border border-border flex flex-col p-0 overflow-hidden min-h-[500px]">
@@ -181,7 +294,7 @@ export function HardwareDetailsView() {
                                 </>
                             ) : (
                                 <>
-                                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded-sm"></div> Active</div>
+                                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded-sm"></div> Telemetry Active</div>
                                     <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-gray-400 rounded-sm"></div> Idle</div>
                                 </>
                             )}
@@ -196,7 +309,8 @@ export function HardwareDetailsView() {
                                 selectedNode={selectedMapNode} 
                                 onNodeSelect={setSelectedMapNode} 
                                 groupBy={groupBy as any} 
-                                colorBy={colorBy as any} 
+                                colorBy={colorBy as any}
+                                nodeAllocation={nodeAllocationMap}
                             />
                         )}
                     </div>

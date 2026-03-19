@@ -33,6 +33,7 @@ interface AcceleratorHexMapProps {
     onNodeSelect?: (nodeName: string | null) => void;
     groupBy?: 'None' | 'Node';
     colorBy?: 'Status' | 'Utilization';
+    nodeAllocation?: Record<string, { allocated: number; capacity: number }>;
 }
 
 export function AcceleratorHexMap({
@@ -41,7 +42,8 @@ export function AcceleratorHexMap({
     selectedNode,
     onNodeSelect,
     groupBy = 'Node',
-    colorBy = 'Utilization'
+    colorBy = 'Utilization',
+    nodeAllocation = {}
 }: AcceleratorHexMapProps) {
 
     const isNpu = acceleratorType === 'NPU';
@@ -138,7 +140,7 @@ export function AcceleratorHexMap({
                                             <span className={`font-bold ${isNpu ? 'text-green-600' : 'text-blue-600'}`}>{device.utilization}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Pod</span>
+                                            <span className="text-muted-foreground">Observed Pod Label</span>
                                             <span className="truncate max-w-[80px]">{device.pod || '-'}</span>
                                         </div>
                                     </div>
@@ -160,20 +162,36 @@ export function AcceleratorHexMap({
                     className={`rounded-lg p-4 transition-colors border shadow-sm cursor-pointer 
                         ${selectedNode === nodeName
                             ? (isNpu ? 'bg-green-50 dark:bg-green-950/20 border-green-500 ring-1 ring-green-500' : 'bg-blue-50 border-blue-500 ring-1 ring-blue-500')
-                            : 'bg-background border-border hover:border-gray-400'
+                            : (nodeAllocation[nodeName]?.allocated ?? 0) > 0
+                                ? 'bg-background border-green-300 hover:border-green-400'
+                                : 'bg-background border-border hover:border-gray-400'
                         }`}
                 >
                     <div className="flex items-center justify-between mb-3">
                         {groupBy !== 'None' ? (
-                            <h4 className={`text-sm font-bold ${selectedNode === nodeName
-                                ? (isNpu ? 'text-green-700 dark:text-green-400' : 'text-blue-700')
-                                : 'text-foreground'}`}>
-                                {nodeName}
-                            </h4>
+                            <div className="flex flex-col gap-1">
+                                <h4 className={`text-sm font-bold ${selectedNode === nodeName
+                                    ? (isNpu ? 'text-green-700 dark:text-green-400' : 'text-blue-700')
+                                    : 'text-foreground'}`}>
+                                    {nodeName}
+                                </h4>
+                                {isNpu && nodeAllocation[nodeName] && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                        Kubernetes Requested {nodeAllocation[nodeName].allocated} / {nodeAllocation[nodeName].capacity}
+                                    </span>
+                                )}
+                            </div>
                         ) : <div />}
-                        <Badge variant="outline" className="text-[10px] py-0 uppercase">
-                            {devices.length} {isNpu ? 'Dies' : 'Units'}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                            {isNpu && nodeAllocation[nodeName] && (
+                                <Badge variant="outline" className="text-[10px] py-0 uppercase">
+                                    {nodeAllocation[nodeName].allocated} Requested
+                                </Badge>
+                            )}
+                            <Badge variant="outline" className="text-[10px] py-0 uppercase">
+                                {devices.length} {isNpu ? 'Dies' : 'Units'}
+                            </Badge>
+                        </div>
                     </div>
                     {renderHexGrid(devices)}
                 </div>
