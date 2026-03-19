@@ -160,42 +160,27 @@ export function HardwareDetailsView() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <Card className="p-4 border-border shadow-sm bg-muted/10">
-                <div className="flex items-center mb-2">
-                    <h3 className="font-bold text-sm">이 화면을 읽는 기준</h3>
-                    <InfoTooltip content="Requested는 Kubernetes Node/Pod 정보에서 계산한 공식 스케줄링 값입니다. Telemetry Active는 Prometheus에서 수집한 device 상태값(Utilization 또는 Memory Usage) 기준입니다." />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                    <div className="rounded-lg border border-border bg-background p-3">
-                        <p className="font-semibold text-foreground">Requested</p>
-                        <p className="mt-1 text-muted-foreground">출처: Kubernetes API</p>
-                        <p className="mt-1 text-muted-foreground">기준: Pod `resources.requests` 합계</p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-background p-3">
-                        <p className="font-semibold text-foreground">Telemetry Active</p>
-                        <p className="mt-1 text-muted-foreground">출처: Prometheus / VictoriaMetrics</p>
-                        <p className="mt-1 text-muted-foreground">기준: `Utilization &gt; 0` 또는 `Memory Usage &gt; 0`</p>
-                    </div>
-                    <div className="rounded-lg border border-border bg-background p-3">
-                        <p className="font-semibold text-foreground">왜 다를 수 있나</p>
-                        <p className="mt-1 text-muted-foreground">모델만 올라가 있고 지금 연산이 없으면 Requested는 존재하지만 타일 색은 약하거나 회색일 수 있습니다.</p>
-                    </div>
-                </div>
-            </Card>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.entries(nodeAllocationMap).map(([nodeName, allocation]) => {
                     const telemetry = nodeTelemetrySummary[nodeName] ?? { active: 0, total: 0, memoryResident: 0, computeActive: 0 };
                     const requestRatio = allocation.capacity > 0 ? Math.round((allocation.allocated / allocation.capacity) * 100) : 0;
-                    const telemetryRatio = telemetry.total > 0 ? Math.round((telemetry.active / telemetry.total) * 100) : 0;
 
                     return (
                         <Card key={nodeName} className="p-4 border-border shadow-sm">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
-                                    <h3 className="font-bold text-base">{nodeName}</h3>
+                                    <div className="flex items-center">
+                                        <h3 className="font-bold text-base">{nodeName}</h3>
+                                        <InfoTooltip content={
+                                            <div className="space-y-2">
+                                                <p><strong>Requested</strong>: Kubernetes API 기준입니다. 이 노드에 스케줄된 Pod들의 `resources.requests` 합계를 사용합니다.</p>
+                                                <p><strong>Telemetry</strong>: Prometheus / VictoriaMetrics 기준입니다. 장치별 `Utilization &gt; 0` 또는 `Memory Usage &gt; 0` 이면 활성로 봅니다.</p>
+                                                <p><strong>왜 다를 수 있나</strong>: 모델만 메모리에 올라가 있고 실제 연산은 없는 경우, Requested는 존재하지만 Compute Active는 0일 수 있습니다.</p>
+                                            </div>
+                                        } />
+                                    </div>
                                     <p className="text-xs text-muted-foreground mt-1">
-                                        Kubernetes 요청량과 실제 장치 telemetry를 나란히 보여줍니다.
+                                        이 노드의 공식 요청량과 실제 장치 관측 상태를 함께 보여줍니다.
                                     </p>
                                 </div>
                                 <div className="text-right">
@@ -205,9 +190,9 @@ export function HardwareDetailsView() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mt-4">
-                                <div className="rounded-lg border border-green-200 bg-green-50/60 p-3">
+                                <div className="rounded-lg border border-green-200 bg-green-50/60 p-3 col-span-2">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-green-800">Requested</span>
+                                        <span className="text-xs font-bold text-green-800">Requested Allocation</span>
                                         <span className="text-xs text-green-700">{requestRatio}%</span>
                                     </div>
                                     <div className="mt-2 text-2xl font-black text-green-700">
@@ -217,22 +202,12 @@ export function HardwareDetailsView() {
                                         Source: Kubernetes Pod requests
                                     </p>
                                 </div>
-
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-emerald-800">Telemetry Active</span>
-                                        <span className="text-xs text-emerald-700">{telemetryRatio}%</span>
-                                    </div>
-                                    <div className="mt-2 text-2xl font-black text-emerald-700">
-                                        {telemetry.active} / {telemetry.total || allocation.capacity}
-                                    </div>
-                                    <p className="mt-1 text-xs text-emerald-700">
-                                        Source: device metrics
-                                    </p>
-                                </div>
                             </div>
 
-                            <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                            <div className="mt-4 grid grid-cols-3 gap-3 text-xs text-muted-foreground">
+                                <div className="rounded-md bg-muted/40 px-3 py-2">
+                                    Telemetry Active: <span className="font-semibold text-foreground">{telemetry.active}</span>
+                                </div>
                                 <div className="rounded-md bg-muted/40 px-3 py-2">
                                     Compute Active: <span className="font-semibold text-foreground">{telemetry.computeActive}</span>
                                 </div>

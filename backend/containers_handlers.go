@@ -9,7 +9,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type containerMapItem struct {
@@ -19,9 +18,17 @@ type containerMapItem struct {
 	Node            string           `json:"node"`
 	ResourceType    string           `json:"resourceType"`
 	Status          string           `json:"status"`
+	StatusReason    string           `json:"statusReason"`
 	CPURequest      int64            `json:"cpuRequest"`
+	HasCPURequest   bool             `json:"hasCpuRequest"`
 	CPUUsagePercent int              `json:"cpuUsagePercent"`
+	MemRequestBytes int64            `json:"memRequestBytes"`
+	HasMemRequest   bool             `json:"hasMemRequest"`
 	MemUsagePercent int              `json:"memUsagePercent"`
+	NPURequest      int              `json:"npuRequest"`
+	NodeNPUCapacity int              `json:"nodeNpuCapacity"`
+	NodeNPUActive   int              `json:"nodeNpuActive"`
+	NodeNPUObserved int              `json:"nodeNpuObservedPercent"`
 	TXCount         int              `json:"txCount"`
 	HasTrace        bool             `json:"hasTrace"`
 	Image           string           `json:"image,omitempty"`
@@ -64,6 +71,10 @@ type traceEntry struct {
 
 func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 	payload, err := a.responseCache.GetOrSet("k8s-containers", a.containersTTL, func() (any, error) {
+		nodes, err := a.clusterCache.ListNodes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list nodes: %w", err)
+		}
 		pods, err := a.clusterCache.ListPods()
 		if err != nil {
 			return nil, fmt.Errorf("failed to list pods: %w", err)
@@ -73,6 +84,11 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 
 		cpuUsage, memUsage, txUsage := a.loadPodInstantMetrics(ctx)
+		nodeTelemetry := a.loadNodeNPUTelemetry(ctx)
+		nodeCapacity := make(map[string]int, len(nodes))
+		for _, node := range nodes {
+			nodeCapacity[node.Name] = acceleratorCapacity(node.Status.Allocatable, "NPU")
+		}
 		items := make([]containerMapItem, 0, len(pods))
 		for _, pod := range pods {
 			if shouldSkipPod(*pod) || len(pod.Spec.Containers) == 0 {
@@ -80,8 +96,11 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 			}
 
 			key := pod.Namespace + "/" + pod.Name
-			cpuRequestMilli := podCPURequestMilli(pod)
-			memRequestBytes := podMemoryRequestBytes(pod)
+			cpuRequestMilli, hasCPURequest := podCPURequestMilli(pod)
+			memRequestBytes, hasMemRequest := podMemoryRequestBytes(pod)
+			npuRequest := acceleratorRequestCount(pod, "NPU")
+			nodeSummary := nodeTelemetry[pod.Spec.NodeName]
+			status, statusReason := podVisualStatus(*pod)
 
 			firstContainer := pod.Spec.Containers[0]
 			items = append(items, containerMapItem{
@@ -90,10 +109,18 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 				Namespace:       pod.Namespace,
 				Node:            pod.Spec.NodeName,
 				ResourceType:    podPrimaryResourceType(pod),
-				Status:          podVisualStatus(*pod),
+				Status:          status,
+				StatusReason:    statusReason,
 				CPURequest:      cpuRequestMilli,
-				CPUUsagePercent: usagePercent(cpuUsage[key], milliToCores(cpuRequestMilli), 0),
-				MemUsagePercent: usagePercent(memUsage[key], float64(memRequestBytes), 0),
+				HasCPURequest:   hasCPURequest,
+				CPUUsagePercent: usagePercent(cpuUsage[key], milliToCores(cpuRequestMilli), -1),
+				MemRequestBytes: memRequestBytes,
+				HasMemRequest:   hasMemRequest,
+				MemUsagePercent: usagePercent(memUsage[key], float64(memRequestBytes), -1),
+				NPURequest:      npuRequest,
+				NodeNPUCapacity: nodeCapacity[pod.Spec.NodeName],
+				NodeNPUActive:   nodeSummary.Active,
+				NodeNPUObserved: nodeSummary.ObservedPercent(),
 				TXCount:         int(txUsage[key] * 1000),
 				HasTrace:        false,
 				Image:           firstContainer.Image,
@@ -109,6 +136,18 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, payload)
+}
+
+type nodeNPUTelemetrySummary struct {
+	Active int
+	Total  int
+}
+
+func (s nodeNPUTelemetrySummary) ObservedPercent() int {
+	if s.Total <= 0 {
+		return 0
+	}
+	return int(clampFloat(percentOf(float64(s.Active), float64(s.Total)), 0, 100))
 }
 
 func (a *app) handleK8sMetrics(w http.ResponseWriter, r *http.Request) {
@@ -134,8 +173,13 @@ func (a *app) handleK8sMetrics(w http.ResponseWriter, r *http.Request) {
 		start := end.Add(-1 * time.Hour)
 		step := time.Minute
 
-		cpuRequestCores := milliToCores(podCPURequestMilli(pod))
-		memRequestBytes := float64(podMemoryRequestBytes(pod))
+		cpuRequestMilli, _ := podCPURequestMilli(pod)
+		memRequestValue, hasMemRequest := podMemoryRequestBytes(pod)
+		cpuRequestCores := milliToCores(cpuRequestMilli)
+		memRequestBytes := float64(memRequestValue)
+		if memRequestBytes <= 0 || !hasMemRequest {
+			memRequestBytes = float64(defaultMemoryRequestBytes())
+		}
 
 		cpuSeries, cpuErr := a.fetchMetricRange(ctx,
 			fmt.Sprintf(`sum(rate(container_cpu_usage_seconds_total{namespace=%q,pod=%q,container!="",container!="POD"}[5m]))`, namespace, podName),
@@ -366,28 +410,32 @@ func parseSimplePodReference(raw string) (string, string, error) {
 	return parts[1], parts[2], nil
 }
 
-func podCPURequestMilli(pod *corev1.Pod) int64 {
+func podCPURequestMilli(pod *corev1.Pod) (int64, bool) {
 	total := int64(0)
+	found := false
 	for _, container := range pod.Spec.Containers {
 		if quantity, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
 			total += quantity.MilliValue()
+			found = true
 		}
 	}
-	return total
+	return total, found
 }
 
-func podMemoryRequestBytes(pod *corev1.Pod) int64 {
+func podMemoryRequestBytes(pod *corev1.Pod) (int64, bool) {
 	total := int64(0)
+	found := false
 	for _, container := range pod.Spec.Containers {
 		if quantity, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
 			total += quantity.Value()
+			found = true
 		}
 	}
-	if total == 0 {
-		fallback := resource.MustParse("1Gi")
-		total = fallback.Value()
-	}
-	return total
+	return total, found
+}
+
+func defaultMemoryRequestBytes() int64 {
+	return int64(1024 * 1024 * 1024)
 }
 
 func podPrimaryResourceType(pod *corev1.Pod) string {
@@ -395,26 +443,65 @@ func podPrimaryResourceType(pod *corev1.Pod) string {
 		for resourceName := range container.Resources.Requests {
 			key := strings.ToLower(string(resourceName))
 			if isAcceleratorResource(key, "NPU") || isAcceleratorResource(key, "GPU") {
-				return "GPU"
+				return "NPU"
 			}
 		}
 	}
 	return "CPU"
 }
 
-func podVisualStatus(pod corev1.Pod) string {
+func podVisualStatus(pod corev1.Pod) (string, string) {
 	if pod.Status.Phase == corev1.PodFailed {
-		return "failed"
+		return "failed", fmt.Sprintf("Pod phase is %s", pod.Status.Phase)
 	}
 	if pod.Status.Phase != corev1.PodRunning {
-		return "warning"
+		return "warning", fmt.Sprintf("Pod phase is %s", pod.Status.Phase)
 	}
 	for _, status := range pod.Status.ContainerStatuses {
-		if status.RestartCount > 0 || !status.Ready {
-			return "warning"
+		if !status.Ready {
+			return "warning", fmt.Sprintf("Container %s is not ready", status.Name)
+		}
+		if status.RestartCount > 0 {
+			return "warning", fmt.Sprintf("Container %s restarted %d times", status.Name, status.RestartCount)
 		}
 	}
-	return "healthy"
+	return "healthy", "Pod is running and all containers are ready"
+}
+
+func (a *app) loadNodeNPUTelemetry(ctx context.Context) map[string]nodeNPUTelemetrySummary {
+	summary := map[string]nodeNPUTelemetrySummary{}
+	if a.observability == nil {
+		return summary
+	}
+
+	utilResults, err := a.observability.queryMetricsInstant(ctx, npuMetricByDevice(npuUtilMetric()))
+	if err != nil {
+		log.Printf("failed to query npu utilization metrics for container map: %v", err)
+		return summary
+	}
+	dramResults, err := a.observability.queryMetricsInstant(ctx, npuMetricByDevice(npuDramUsedMetric()))
+	if err != nil {
+		log.Printf("failed to query npu dram metrics for container map: %v", err)
+		return summary
+	}
+
+	states := mergeNPUDeviceStates(npuMetricSet{
+		util:     utilResults,
+		dramUsed: dramResults,
+	})
+	for _, state := range states {
+		if strings.TrimSpace(state.Hostname) == "" {
+			continue
+		}
+		item := summary[state.Hostname]
+		item.Total++
+		if isTelemetryActive(state) {
+			item.Active++
+		}
+		summary[state.Hostname] = item
+	}
+
+	return summary
 }
 
 func podPrimaryVolume(pod *corev1.Pod) *containerVolume {
@@ -467,7 +554,7 @@ func percentOf(value, total float64) float64 {
 
 func milliToCores(milli int64) float64 {
 	if milli <= 0 {
-		return 1
+		return 0
 	}
 	return float64(milli) / 1000
 }

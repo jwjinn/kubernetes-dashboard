@@ -39,6 +39,7 @@ export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDet
                                 <span><strong className="text-foreground">Namespace:</strong> {container.namespace}</span>
                                 <span><strong className="text-foreground">Node:</strong> {container.node}</span>
                                 <span className="uppercase tracking-wider opacity-80">{container.status}</span>
+                                {container.statusReason && <span><strong className="text-foreground">Reason:</strong> {container.statusReason}</span>}
                             </SheetDescription>
                         </div>
                     </div>

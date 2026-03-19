@@ -365,7 +365,7 @@ func buildNPUSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, states []npuDevi
 		}
 		return contexts[i].Node < contexts[j].Node
 	})
-	overview := buildNPUOverview(nodes, pods)
+	overview := buildNPUOverview(nodes, pods, states)
 	podMappingRows := buildNPUPodMappings(pods)
 
 	return &npuSnapshot{
@@ -405,10 +405,12 @@ func buildNPUPodMappings(pods []*corev1.Pod) []podMappingRow {
 	return rows
 }
 
-func buildNPUOverview(nodes []*corev1.Node, pods []*corev1.Pod) npuClusterOverview {
+func buildNPUOverview(nodes []*corev1.Node, pods []*corev1.Pod, states []npuDeviceState) npuClusterOverview {
 	nodeAllocation := make([]nodeAllocationRow, 0)
 	hardwareVersions := make([]hardwareVersion, 0)
 	allocationsByNode := make(map[string]int)
+	driverVersionByNode := make(map[string]string)
+	productByNode := make(map[string]string)
 
 	for _, pod := range pods {
 		if !shouldCountPodForNodeAllocation(pod) {
@@ -419,6 +421,18 @@ func buildNPUOverview(nodes []*corev1.Node, pods []*corev1.Pod) npuClusterOvervi
 			continue
 		}
 		allocationsByNode[pod.Spec.NodeName] += requested
+	}
+
+	for _, state := range states {
+		if strings.TrimSpace(state.Hostname) == "" {
+			continue
+		}
+		if driverVersionByNode[state.Hostname] == "" && strings.TrimSpace(state.DriverVersion) != "" {
+			driverVersionByNode[state.Hostname] = state.DriverVersion
+		}
+		if productByNode[state.Hostname] == "" && strings.TrimSpace(state.Card) != "" {
+			productByNode[state.Hostname] = state.Card
+		}
 	}
 
 	totalCapacity := 0
@@ -441,9 +455,9 @@ func buildNPUOverview(nodes []*corev1.Node, pods []*corev1.Pod) npuClusterOvervi
 		})
 		hardwareVersions = append(hardwareVersions, hardwareVersion{
 			Node:          node.Name,
-			DriverVersion: firstNonEmpty(npuDriverVersionOverride(), node.Labels["rebellions.ai/driver-version"], "unknown"),
+			DriverVersion: firstNonEmpty(driverVersionByNode[node.Name], npuDriverVersionOverride(), node.Labels["rebellions.ai/driver-version"], "unknown"),
 			Family:        firstNonEmpty(node.Labels["rebellions.ai/family"], defaultNPUFamily),
-			Product:       firstNonEmpty(node.Labels["rebellions.ai/product"], defaultNPUCardName),
+			Product:       firstNonEmpty(productByNode[node.Name], node.Labels["rebellions.ai/product"], defaultNPUCardName),
 		})
 
 		totalCapacity += capacity

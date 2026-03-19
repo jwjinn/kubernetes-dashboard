@@ -6,7 +6,7 @@ import { ContainerBlock } from '@/features/kubernetes/components/ContainerBlock'
 import type { ContainerData } from '@/features/kubernetes/components/ContainerBlock';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ResourceDetailsSheet } from '@/features/kubernetes/components/ResourceDetailsSheet';
-import { Cpu, Zap, Search, Info } from 'lucide-react';
+import { Zap, Search, Info } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { getEnv } from '@/config/env';
 
@@ -15,6 +15,8 @@ export default function ContainerMapPage() {
     const [selectedContainer, setSelectedContainer] = useState<ContainerData | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [hoveredPodId, setHoveredPodId] = useState<string | null>(null);
+    const [statusFilter, setStatusFilter] = useState<'all' | 'healthy' | 'warning' | 'failed'>('all');
+    const [workloadFilter, setWorkloadFilter] = useState<'all' | 'NPU' | 'CPU'>('all');
 
     const acceleratorMode = getEnv('VITE_ACCELERATOR_TYPE', 'GPU');
 
@@ -29,23 +31,16 @@ export default function ContainerMapPage() {
         setSelectedContainer(container);
     };
 
-    // Extract workload prefix (e.g., app-worker-A-0 -> app-worker-A)
-    const getWorkloadName = (name: string) => {
-        const parts = name.split('-');
-        if (parts.length > 1) {
-            // Remove the last part (instance/node index)
-            return parts.slice(0, -1).join('-');
-        }
-        return name;
-    };
-
     const filteredContainers = useMemo(() => {
-        if (!searchQuery) return containers;
-        return containers.filter(c =>
-            c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.namespace.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }, [containers, searchQuery]);
+        return containers.filter(c => {
+            const matchesSearch = !searchQuery ||
+                c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                c.namespace.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
+            const matchesWorkload = workloadFilter === 'all' || c.resourceType === workloadFilter;
+            return matchesSearch && matchesStatus && matchesWorkload;
+        });
+    }, [containers, searchQuery, statusFilter, workloadFilter]);
 
     // Grouping logic
     const groupedContainers = filteredContainers.reduce((acc, container) => {
@@ -67,10 +62,10 @@ export default function ContainerMapPage() {
                                 <div className="absolute left-0 top-6 w-80 p-3 bg-popover border rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none text-xs leading-relaxed">
                                     <p className="font-bold mb-1">지도 읽는 법:</p>
                                     <ul className="list-disc ml-4 space-y-1">
-                                        <li>각 블록은 하나의 **컨테이너/파드**를 나타냅니다.</li>
-                                        <li>**색상**: 리소스 사용량 및 상태 (초록:정상, 노랑:경고, 빨강:장애)</li>
-                                        <li>**아이콘**: <Zap className="inline w-3 h-3" /> {acceleratorMode} 사용, <Cpu className="inline w-3 h-3" /> CPU 전용</li>
-                                        <li>**하이라이트**: 블록에 마우스를 올리면 해당 파드만 강조됩니다.</li>
+                                        <li>각 블록은 하나의 파드를 의미합니다.</li>
+                                        <li>보라색 카드는 {acceleratorMode} 요청 파드, 초록색 카드는 CPU 전용 파드입니다.</li>
+                                        <li>노란 표시는 경고 상태, 빨간 표시는 실패 상태입니다.</li>
+                                        <li>{acceleratorMode} 파드는 CPU, MEM, 그리고 노드 기준 {acceleratorMode} 관측 활성도를 함께 보여줍니다.</li>
                                     </ul>
                                 </div>
                             </div>
@@ -80,36 +75,36 @@ export default function ContainerMapPage() {
                         </p>
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px]">
                             <div className="flex items-center gap-1.5">
-                                <div className={`w-3 h-3 rounded-sm ${acceleratorMode === 'NPU' ? 'bg-green-500' : 'bg-indigo-500'}`}></div>
-                                <span className="text-muted-foreground">{acceleratorMode} (Usage Base)</span>
+                                <div className="w-3 h-3 rounded-sm bg-indigo-500"></div>
+                                <span className="text-muted-foreground">{acceleratorMode} workload</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded-sm bg-emerald-500"></div>
-                                <span className="text-muted-foreground">CPU (Usage Base)</span>
+                                <span className="text-muted-foreground">CPU-only workload</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded-sm bg-yellow-400"></div>
-                                <span className="text-muted-foreground">Warning</span>
+                                <span className="text-muted-foreground">Warning: restart / not ready / pending</span>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded-sm bg-red-500"></div>
-                                <span className="text-muted-foreground">Failed</span>
+                                <span className="text-muted-foreground">Failed pod</span>
                             </div>
 
                             <div className="h-3 w-[1px] bg-border mx-1"></div>
 
                             <div className="flex items-center gap-1.5">
-                                <Zap className="w-3 h-3 text-yellow-500" fill="currentColor" />
-                                <span className="text-muted-foreground">{acceleratorMode} Chip</span>
+                                <Zap className="w-3 h-3 text-indigo-600" fill="currentColor" />
+                                <span className="text-muted-foreground">{acceleratorMode} requested</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                                <Cpu className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-muted-foreground">CPU Base</span>
+                                <Info className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-muted-foreground">Hover to see warning reason</span>
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3 w-full lg:w-auto">
+                    <div className="flex items-center gap-3 w-full lg:w-auto flex-wrap">
                         <div className="relative flex-1 lg:w-64">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
@@ -118,6 +113,31 @@ export default function ContainerMapPage() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
+                                <SelectTrigger className="w-[150px]">
+                                    <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Status</SelectItem>
+                                    <SelectItem value="healthy">Healthy</SelectItem>
+                                    <SelectItem value="warning">Warning</SelectItem>
+                                    <SelectItem value="failed">Failed</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Select value={workloadFilter} onValueChange={(val: any) => setWorkloadFilter(val)}>
+                                <SelectTrigger className="w-[150px]">
+                                    <SelectValue placeholder="Workload" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Workloads</SelectItem>
+                                    <SelectItem value="NPU">{acceleratorMode} Pods</SelectItem>
+                                    <SelectItem value="CPU">CPU-only Pods</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="flex flex-col gap-1">
                             <Select value={groupBy} onValueChange={(val: any) => setGroupBy(val)}>
@@ -170,7 +190,7 @@ export default function ContainerMapPage() {
                             ))}
                             {filteredContainers.length === 0 && (
                                 <div className="flex flex-col items-center justify-center h-64 text-muted-foreground italic">
-                                    No containers found matching "{searchQuery}"
+                                    No pods found for the current search/filter
                                 </div>
                             )}
                         </div>
