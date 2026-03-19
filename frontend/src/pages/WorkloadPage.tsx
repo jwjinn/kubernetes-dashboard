@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchK8sEvents, fetchStartupAnalysis } from '@/api';
+import { fetchK8sEvents, fetchStartupAnalysis, type K8sEvent } from '@/api';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import { StartupTimeline } from '@/features/diagnosis/components/StartupTimeline';
 import { EventTable } from '@/features/diagnosis/components/EventTable';
@@ -9,7 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { Activity, ShieldAlert, Sparkles, Terminal, AlertCircle } from 'lucide-react';
 
 export default function WorkloadPage() {
-    const { data: events = [], isLoading: eventsLoading } = useQuery({ queryKey: ['k8sEvents'], queryFn: fetchK8sEvents });
+    const { data: events = [], isLoading: eventsLoading } = useQuery<K8sEvent[]>({
+        queryKey: ['k8sEvents'],
+        queryFn: () => fetchK8sEvents(),
+    });
     const { data: analysis, isLoading: analysisLoading } = useQuery({ queryKey: ['startupAnalysis'], queryFn: fetchStartupAnalysis });
 
     const warningCount = events.filter((e: any) => e.type === 'Warning').length;
