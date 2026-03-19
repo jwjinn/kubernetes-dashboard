@@ -66,13 +66,13 @@ export interface NpuDevice {
 }
 
 export interface NpuProcessContext {
-    pid: string;
-    processName: string;
-    priority: string;
     status: string;
     memalloc: string;
     node: string;
     deviceIdx: string;
+    utilization: number;
+    temperature: number;
+    power: number;
 }
 
 // New API functions for the NPU dashboard tabs

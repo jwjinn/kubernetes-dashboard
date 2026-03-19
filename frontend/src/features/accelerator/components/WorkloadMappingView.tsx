@@ -1,7 +1,7 @@
 import { Card, Text, Metric } from '@tremor/react';
 import ReactECharts from 'echarts-for-react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchNpuWorkloadMapping } from '@/api';
+import { fetchNpuWorkloadMapping, type NpuProcessContext } from '@/api';
 import { Search } from 'lucide-react';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 
@@ -13,7 +13,7 @@ export function WorkloadMappingView() {
     });
 
     const podMappings = workloadData?.podMappings || [];
-    const contexts = workloadData?.contexts || [];
+    const contexts = (workloadData?.contexts || []) as NpuProcessContext[];
 
     // Simple bar chart to visualize pod requirements
     const podChartOption = {
@@ -125,15 +125,15 @@ export function WorkloadMappingView() {
                 </div>
             </Card>
 
-            {/* Process Context Table */}
+            {/* Device Context Table */}
             <Card className="overflow-hidden p-0 border-border shadow-sm">
                 <div className="px-4 py-3 border-b border-border bg-muted/20 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                     <div>
                         <div className="flex items-center">
                             <h3 className="font-bold text-sm">NPU 프로세스 상세 컨텍스트 정보 (rbln-smi)</h3>
-                            <InfoTooltip content="이 표는 실제 OS PID 목록이 아니라, exporter telemetry 기준으로 어떤 Pod/컨테이너 라벨이 어떤 NPU device와 함께 관측되었는지 보여줍니다. 상태(Status)는 장치 telemetry 기준이며 `연산 중` 또는 `메모리 점유` 값을 가질 수 있습니다." />
+                            <InfoTooltip content="Pod나 컨테이너 매핑 추정 없이, exporter telemetry에서 실제로 관측되는 NPU 장치 상태만 단순하게 보여줍니다. 상태(Status)는 장치 telemetry 기준이며 `연산 중` 또는 `메모리 점유` 값을 가질 수 있습니다." />
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">Telemetry-based device context observed from NPU metrics.</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Telemetry-based NPU device rows observed from exporter metrics.</p>
                     </div>
                 </div>
                 <div className="w-full max-h-[400px] overflow-auto">
@@ -142,35 +142,30 @@ export function WorkloadMappingView() {
                             <tr>
                                 <th className="px-4 py-3 font-bold">Node</th>
                                 <th className="px-4 py-3 font-bold">Device</th>
-                                <th className="px-4 py-3 font-bold">Pod</th>
-                                <th className="px-4 py-3 font-bold">Container</th>
                                 <th className="px-4 py-3 font-bold">Status</th>
                                 <th className="px-4 py-3 font-bold text-right">Memory Usage</th>
+                                <th className="px-4 py-3 font-bold text-right">Util</th>
+                                <th className="px-4 py-3 font-bold text-right">Temp</th>
+                                <th className="px-4 py-3 font-bold text-right">Power</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {isLoading ? (
-                                <tr><td colSpan={6} className="text-center py-6 text-muted-foreground animate-pulse">Loading data...</td></tr>
+                                <tr><td colSpan={7} className="text-center py-6 text-muted-foreground animate-pulse">Loading data...</td></tr>
                             ) : contexts.length === 0 ? (
-                                <tr><td colSpan={6} className="text-center py-6 text-muted-foreground">No active NPU telemetry rows found.</td></tr>
+                                <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">No active NPU telemetry rows found.</td></tr>
                             ) : (
-                                contexts.map((ctx: any, idx: number) => (
+                                contexts.map((ctx, idx: number) => (
                                     <tr key={`${ctx.node}-${ctx.deviceIdx}-${idx}`} className="hover:bg-muted/50 transition-colors">
                                         <td className="px-4 py-3 font-mono text-muted-foreground">{ctx.node}</td>
                                         <td className="px-4 py-3 font-mono text-foreground font-medium">{ctx.deviceIdx}</td>
-                                        <td className="px-4 py-3">
-                                            <span className="font-medium text-foreground">{ctx.podName}</span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                                {ctx.containerName}
-                                            </div>
-                                        </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {ctx.status === 'Compute' ? '연산 중' : ctx.status === 'Memory Resident' ? '메모리 점유' : ctx.status === 'Error' ? '오류' : '유휴'}
                                         </td>
                                         <td className="px-4 py-3 text-right font-mono text-foreground">{ctx.memalloc}</td>
+                                        <td className="px-4 py-3 text-right font-mono text-foreground">{ctx.utilization}%</td>
+                                        <td className="px-4 py-3 text-right font-mono text-foreground">{ctx.temperature}C</td>
+                                        <td className="px-4 py-3 text-right font-mono text-foreground">{ctx.power}W</td>
                                     </tr>
                                 ))
                             )}

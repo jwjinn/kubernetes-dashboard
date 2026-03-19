@@ -90,12 +90,13 @@ type podMappingRow struct {
 }
 
 type processRow struct {
-	PodName       string `json:"podName"`
-	ContainerName string `json:"containerName"`
-	Status        string `json:"status"`
-	Memalloc      string `json:"memalloc"`
-	Node          string `json:"node"`
-	DeviceIdx     string `json:"deviceIdx"`
+	Status      string `json:"status"`
+	Memalloc    string `json:"memalloc"`
+	Node        string `json:"node"`
+	DeviceIdx   string `json:"deviceIdx"`
+	Utilization int    `json:"utilization"`
+	Temperature int    `json:"temperature"`
+	Power       int    `json:"power"`
 }
 
 type npuSnapshot struct {
@@ -347,12 +348,13 @@ func buildNPUSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, states []npuDevi
 
 		if isTelemetryActive(state) {
 			contexts = append(contexts, processRow{
-				PodName:       emptyAsDash(state.Pod),
-				ContainerName: emptyAsDash(state.Container),
-				Status:        telemetryStatus(state),
-				Memalloc:      bytesToGiBString(state.DramUsedBytes),
-				Node:          state.Hostname,
-				DeviceIdx:     state.Name,
+				Status:      telemetryStatus(state),
+				Memalloc:    bytesToGiBString(state.DramUsedBytes),
+				Node:        state.Hostname,
+				DeviceIdx:   state.Name,
+				Utilization: clampInt(int(state.Utilization), 0, 100),
+				Temperature: int(state.Temperature),
+				Power:       int(state.Power),
 			})
 		}
 	}
