@@ -140,19 +140,9 @@ export function ClusterSummaryWidget() {
                 ? '주의 필요'
                 : '안정';
 
-        const summarySentence = requestRatio >= 90 || errorDevices > 0
-            ? `현재 NPU ${npuOverview.totalCapacity}개 중 ${npuOverview.allocated}개가 요청되어 있고 오류 장치 ${errorDevices}개가 감지되었습니다. 신규 배치 전 노드별 상세와 하드웨어 상태를 우선 확인하는 편이 안전합니다.`
-            : requestRatio >= 70 || attentionNodes > 0
-                ? `현재 NPU ${npuOverview.totalCapacity}개 중 ${npuOverview.allocated}개가 요청되어 있으며 주의가 필요한 노드가 ${attentionNodes}개 있습니다. 노드별 편차와 대표 워크로드를 함께 확인해 두면 좋습니다.`
-                : `현재 NPU ${npuOverview.totalCapacity}개 중 ${npuOverview.allocated}개가 요청되어 있고 ${available}개를 추가 배치할 수 있습니다. 전체 상태는 안정적이며 메인 토폴로지와 함께 보면 운영 판단이 빠릅니다.`;
-
-        const summaryReason = statusLabel === '즉시 점검 필요'
-            ? `판단 근거: 전체 요청률 ${requestRatio}%, 오류 장치 ${errorDevices}개${hotDevices > 0 ? `, 고온 장치 ${hotDevices}개` : ''}`
-            : statusLabel === '주의 필요'
-                ? `판단 근거: 전체 요청률 ${requestRatio}%, 주의 노드 ${attentionNodes}개${hotDevices > 0 ? `, 고온 장치 ${hotDevices}개` : ''}`
-                : `판단 근거: 전체 요청률 ${requestRatio}%, 오류 장치 ${errorDevices}개, 주의 노드 ${attentionNodes}개`;
-
-        const summaryRuleGuide = '기준: 오류 장치가 있거나 요청률 90% 이상이면 즉시 점검 필요, 요청률 70% 이상이거나 고온/주의 노드가 있으면 주의 필요, 그 외는 안정으로 표시합니다.';
+        const summarySentence = `총 ${npuOverview.totalCapacity} NPU 중 ${npuOverview.allocated}개가 요청되어 있으며, 즉시 사용 가능한 여유는 ${available}개입니다.`;
+        const summaryReason = `근거: 요청률 ${requestRatio}% · 오류 장치 ${errorDevices}개 · 주의 노드 ${attentionNodes}개`;
+        const summaryRuleGuide = '점검 필요: 오류 장치 감지 · 주의: 요청률 70% 이상 또는 고온/주의 노드 존재 · 안정: 그 외';
 
         return (
             <div className="space-y-6">
@@ -161,12 +151,15 @@ export function ClusterSummaryWidget() {
                         <div className="max-w-3xl">
                             <div className="inline-flex items-center gap-2 rounded-full border border-current/15 bg-background/70 px-3 py-1 text-xs font-bold">
                                 <AlertTriangle className="h-3.5 w-3.5" />
-                                현재 상태: {statusLabel}
+                                {statusLabel}
                             </div>
                             <h3 className="mt-3 text-lg font-bold">메인 클러스터 요약</h3>
                             <p className="mt-2 text-sm leading-6 opacity-90">{summarySentence}</p>
                             <p className="mt-3 text-xs font-medium opacity-90">{summaryReason}</p>
-                            <p className="mt-1 text-xs opacity-75">{summaryRuleGuide}</p>
+                            <div className="mt-2 inline-flex items-center gap-2 text-xs opacity-80">
+                                <span>판단 기준 보기</span>
+                                <InfoTooltip content={summaryRuleGuide} />
+                            </div>
                         </div>
                         <div className="grid min-w-[260px] grid-cols-2 gap-3">
                             <div className="rounded-xl border border-current/10 bg-background/75 p-4">
