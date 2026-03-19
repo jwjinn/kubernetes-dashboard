@@ -101,6 +101,13 @@ export const fetchContainerMap = async () => {
     return response.json();
 };
 
+export const fetchPodDescribe = async (namespace: string, podName: string): Promise<string> => {
+    const search = new URLSearchParams({ namespace, podName });
+    const response = await apiFetch(`/api/k8s/pod-describe?${search.toString()}`);
+    if (!response.ok) throw new Error('Failed to fetch pod describe');
+    return response.text();
+};
+
 export interface NodeDashboardNode {
     nodeId: string;
     cpuUtil: number;

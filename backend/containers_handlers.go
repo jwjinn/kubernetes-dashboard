@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -350,6 +351,25 @@ func (a *app) handleK8sEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
+func (a *app) handlePodDescribe(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	podName := strings.TrimSpace(r.URL.Query().Get("podName"))
+	if namespace == "" || podName == "" {
+		writeError(w, http.StatusBadRequest, "namespace and podName are required")
+		return
+	}
+
+	pod, err := a.clusterCache.GetPod(namespace, podName)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("failed to resolve pod %s/%s: %v", namespace, podName, err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(renderPodDescribe(pod)))
+}
+
 func (a *app) handleLogs(w http.ResponseWriter, r *http.Request) {
 	podName := r.URL.Query().Get("pod")
 	level := strings.ToUpper(r.URL.Query().Get("level"))
@@ -494,6 +514,369 @@ func podNameFromEvent(event corev1.Event) string {
 		return event.InvolvedObject.Name
 	}
 	return ""
+}
+
+func renderPodDescribe(pod *corev1.Pod) string {
+	if pod == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	writeDescribeLine(&b, "Name", pod.Name)
+	writeDescribeLine(&b, "Namespace", pod.Namespace)
+	writeDescribeLine(&b, "Priority", describePriority(pod.Spec.Priority))
+	writeDescribeLine(&b, "Service Account", firstNonEmpty(pod.Spec.ServiceAccountName, "default"))
+	writeDescribeLine(&b, "Node", formatDescribeNode(pod))
+	writeDescribeLine(&b, "Start Time", formatDescribeTime(pod.Status.StartTime))
+	writeDescribeMap(&b, "Labels", pod.Labels)
+	writeDescribeMap(&b, "Annotations", pod.Annotations)
+	writeDescribeLine(&b, "Status", string(pod.Status.Phase))
+	writeDescribeLine(&b, "IP", pod.Status.PodIP)
+	writeDescribeIPs(&b, pod.Status.PodIPs)
+	writeDescribeLine(&b, "Controlled By", describeControlledBy(pod.OwnerReferences))
+
+	b.WriteString("Containers:\n")
+	for _, container := range pod.Spec.Containers {
+		writeDescribeContainer(&b, container, pod.Status.ContainerStatuses)
+	}
+
+	b.WriteString("Conditions:\n")
+	b.WriteString("  Type\tStatus\n")
+	for _, condition := range pod.Status.Conditions {
+		b.WriteString(fmt.Sprintf("  %s\t%s\n", condition.Type, condition.Status))
+	}
+
+	b.WriteString("Volumes:\n")
+	for _, volume := range pod.Spec.Volumes {
+		writeDescribeVolume(&b, volume)
+	}
+
+	writeDescribeLine(&b, "QoS Class", string(pod.Status.QOSClass))
+	writeDescribeMap(&b, "Node-Selectors", pod.Spec.NodeSelector)
+	writeDescribeTolerations(&b, pod.Spec.Tolerations)
+
+	writeDescribeLine(&b, "Events", "<see Events tab>")
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func writeDescribeLine(b *strings.Builder, key, value string) {
+	if strings.TrimSpace(value) == "" {
+		value = "<none>"
+	}
+	b.WriteString(fmt.Sprintf("%-18s %s\n", key+":", value))
+}
+
+func writeDescribeMap(b *strings.Builder, key string, values map[string]string) {
+	if len(values) == 0 {
+		writeDescribeLine(b, key, "<none>")
+		return
+	}
+
+	keys := make([]string, 0, len(values))
+	for k := range values {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	first := true
+	for _, k := range keys {
+		label := ""
+		if first {
+			label = key + ":"
+			first = false
+		}
+		b.WriteString(fmt.Sprintf("%-18s %s=%s\n", label, k, values[k]))
+	}
+}
+
+func writeDescribeIPs(b *strings.Builder, podIPs []corev1.PodIP) {
+	if len(podIPs) == 0 {
+		writeDescribeLine(b, "IPs", "<none>")
+		return
+	}
+	b.WriteString("IPs:\n")
+	for _, podIP := range podIPs {
+		b.WriteString(fmt.Sprintf("  IP:\t%s\n", podIP.IP))
+	}
+}
+
+func writeDescribeContainer(b *strings.Builder, container corev1.Container, statuses []corev1.ContainerStatus) {
+	b.WriteString(fmt.Sprintf("  %s:\n", container.Name))
+	status := findContainerStatus(statuses, container.Name)
+
+	if status != nil {
+		writeDescribeIndentedLine(b, 4, "Container ID", status.ContainerID)
+	}
+	writeDescribeIndentedLine(b, 4, "Image", container.Image)
+	if status != nil && status.ImageID != "" {
+		writeDescribeIndentedLine(b, 4, "Image ID", status.ImageID)
+	}
+	writeDescribeIndentedLine(b, 4, "Port", describeContainerPort(container.Ports))
+	writeDescribeIndentedLine(b, 4, "Host Port", describeHostPort(container.Ports))
+	writeDescribeIndentedLine(b, 4, "State", describeContainerState(status))
+	if status != nil {
+		if status.State.Running != nil {
+			writeDescribeIndentedLine(b, 6, "Started", status.State.Running.StartedAt.Time.Format(time.RFC1123Z))
+		}
+		writeDescribeIndentedLine(b, 4, "Ready", strconv.FormatBool(status.Ready))
+		writeDescribeIndentedLine(b, 4, "Restart Count", strconv.Itoa(int(status.RestartCount)))
+	}
+
+	if len(container.Resources.Limits) > 0 {
+		b.WriteString("    Limits:\n")
+		for _, line := range describeResourceList(container.Resources.Limits) {
+			writeDescribeIndentedLine(b, 6, line.key, line.value)
+		}
+	}
+	if len(container.Resources.Requests) > 0 {
+		b.WriteString("    Requests:\n")
+		for _, line := range describeResourceList(container.Resources.Requests) {
+			writeDescribeIndentedLine(b, 6, line.key, line.value)
+		}
+	}
+	if container.LivenessProbe != nil {
+		writeDescribeIndentedLine(b, 4, "Liveness", describeProbe(container.LivenessProbe))
+	}
+	if container.ReadinessProbe != nil {
+		writeDescribeIndentedLine(b, 4, "Readiness", describeProbe(container.ReadinessProbe))
+	}
+
+	b.WriteString("    Environment:\n")
+	if len(container.Env) == 0 {
+		writeDescribeIndentedLine(b, 6, "", "<none>")
+	} else {
+		for _, env := range container.Env {
+			writeDescribeIndentedLine(b, 6, env.Name, describeEnvVar(env))
+		}
+	}
+
+	b.WriteString("    Mounts:\n")
+	if len(container.VolumeMounts) == 0 {
+		writeDescribeIndentedLine(b, 6, "", "<none>")
+	} else {
+		for _, mount := range container.VolumeMounts {
+			target := mount.MountPath + " from " + mount.Name
+			if mount.SubPath != "" {
+				target += fmt.Sprintf(` (rw,path="%s")`, mount.SubPath)
+			} else if mount.ReadOnly {
+				target += " (ro)"
+			} else {
+				target += " (rw)"
+			}
+			writeDescribeIndentedLine(b, 6, "", target)
+		}
+	}
+}
+
+func writeDescribeIndentedLine(b *strings.Builder, indent int, key, value string) {
+	prefix := strings.Repeat(" ", indent)
+	if strings.TrimSpace(key) == "" {
+		b.WriteString(prefix + value + "\n")
+		return
+	}
+	b.WriteString(fmt.Sprintf("%s%-16s %s\n", prefix, key+":", value))
+}
+
+type resourceLine struct {
+	key   string
+	value string
+}
+
+func describeResourceList(list corev1.ResourceList) []resourceLine {
+	lines := make([]resourceLine, 0, len(list))
+	keys := make([]string, 0, len(list))
+	for name := range list {
+		keys = append(keys, string(name))
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		quantity := list[corev1.ResourceName(key)]
+		lines = append(lines, resourceLine{key: key, value: quantity.String()})
+	}
+	return lines
+}
+
+func describeContainerPort(ports []corev1.ContainerPort) string {
+	if len(ports) == 0 {
+		return "<none>"
+	}
+	port := ports[0]
+	return fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol)
+}
+
+func describeHostPort(ports []corev1.ContainerPort) string {
+	if len(ports) == 0 {
+		return "<none>"
+	}
+	port := ports[0]
+	return fmt.Sprintf("%d/%s", port.HostPort, port.Protocol)
+}
+
+func describeContainerState(status *corev1.ContainerStatus) string {
+	if status == nil {
+		return "<unknown>"
+	}
+	switch {
+	case status.State.Running != nil:
+		return "Running"
+	case status.State.Waiting != nil:
+		return "Waiting (" + firstNonEmpty(status.State.Waiting.Reason, "unknown") + ")"
+	case status.State.Terminated != nil:
+		return "Terminated (" + firstNonEmpty(status.State.Terminated.Reason, "unknown") + ")"
+	default:
+		return "<unknown>"
+	}
+}
+
+func describeProbe(probe *corev1.Probe) string {
+	if probe == nil {
+		return "<none>"
+	}
+	details := []string{}
+	if probe.ProbeHandler.Exec != nil {
+		details = append(details, "exec "+strings.Join(probe.ProbeHandler.Exec.Command, " "))
+	}
+	if probe.ProbeHandler.HTTPGet != nil {
+		details = append(details, fmt.Sprintf("http-get %s://:%s%s", strings.ToLower(string(probe.ProbeHandler.HTTPGet.Scheme)), probe.ProbeHandler.HTTPGet.Port.String(), probe.ProbeHandler.HTTPGet.Path))
+	}
+	if probe.ProbeHandler.TCPSocket != nil {
+		details = append(details, fmt.Sprintf("tcp-socket :%s", probe.ProbeHandler.TCPSocket.Port.String()))
+	}
+	details = append(details,
+		fmt.Sprintf("delay=%ds", probe.InitialDelaySeconds),
+		fmt.Sprintf("timeout=%ds", probe.TimeoutSeconds),
+		fmt.Sprintf("period=%ds", probe.PeriodSeconds),
+		fmt.Sprintf("#success=%d", probe.SuccessThreshold),
+		fmt.Sprintf("#failure=%d", probe.FailureThreshold),
+	)
+	return strings.Join(details, " ")
+}
+
+func describeEnvVar(env corev1.EnvVar) string {
+	if env.Value != "" {
+		return env.Value
+	}
+	if env.ValueFrom == nil {
+		return "<none>"
+	}
+	if env.ValueFrom.FieldRef != nil {
+		return fmt.Sprintf("(%s:%s)", env.ValueFrom.FieldRef.APIVersion, env.ValueFrom.FieldRef.FieldPath)
+	}
+	if env.ValueFrom.SecretKeyRef != nil {
+		return fmt.Sprintf("<set to key %s in secret %s>", env.ValueFrom.SecretKeyRef.Key, env.ValueFrom.SecretKeyRef.Name)
+	}
+	if env.ValueFrom.ConfigMapKeyRef != nil {
+		return fmt.Sprintf("<set to key %s in configmap %s>", env.ValueFrom.ConfigMapKeyRef.Key, env.ValueFrom.ConfigMapKeyRef.Name)
+	}
+	return "<valueFrom>"
+}
+
+func writeDescribeVolume(b *strings.Builder, volume corev1.Volume) {
+	b.WriteString(fmt.Sprintf("  %s:\n", volume.Name))
+	switch {
+	case volume.EmptyDir != nil:
+		writeDescribeIndentedLine(b, 4, "Type", "EmptyDir (a temporary directory that shares a pod's lifetime)")
+		writeDescribeIndentedLine(b, 4, "Medium", string(volume.EmptyDir.Medium))
+		if volume.EmptyDir.SizeLimit != nil {
+			writeDescribeIndentedLine(b, 4, "SizeLimit", volume.EmptyDir.SizeLimit.String())
+		} else {
+			writeDescribeIndentedLine(b, 4, "SizeLimit", "<unset>")
+		}
+	case volume.ConfigMap != nil:
+		writeDescribeIndentedLine(b, 4, "Type", "ConfigMap (a volume populated by a ConfigMap)")
+		writeDescribeIndentedLine(b, 4, "Name", volume.ConfigMap.Name)
+		writeDescribeIndentedLine(b, 4, "Optional", strconv.FormatBool(volume.ConfigMap.Optional != nil && *volume.ConfigMap.Optional))
+	case volume.Secret != nil:
+		writeDescribeIndentedLine(b, 4, "Type", "Secret (a volume populated by a Secret)")
+		writeDescribeIndentedLine(b, 4, "SecretName", volume.Secret.SecretName)
+		writeDescribeIndentedLine(b, 4, "Optional", strconv.FormatBool(volume.Secret.Optional != nil && *volume.Secret.Optional))
+	case volume.Projected != nil:
+		writeDescribeIndentedLine(b, 4, "Type", "Projected (a volume that contains injected data from multiple sources)")
+	default:
+		writeDescribeIndentedLine(b, 4, "Type", "Other")
+	}
+}
+
+func writeDescribeTolerations(b *strings.Builder, tolerations []corev1.Toleration) {
+	if len(tolerations) == 0 {
+		writeDescribeLine(b, "Tolerations", "<none>")
+		return
+	}
+	first := true
+	for _, tol := range tolerations {
+		label := ""
+		if first {
+			label = "Tolerations:"
+			first = false
+		}
+		b.WriteString(fmt.Sprintf("%-18s %s\n", label, describeToleration(tol)))
+	}
+}
+
+func describeToleration(tol corev1.Toleration) string {
+	parts := []string{}
+	if tol.Key != "" {
+		parts = append(parts, tol.Key)
+	}
+	if tol.Operator != "" {
+		parts = append(parts, "op="+string(tol.Operator))
+	}
+	if tol.Value != "" {
+		parts = append(parts, "value="+tol.Value)
+	}
+	if tol.Effect != "" {
+		parts = append(parts, string(tol.Effect))
+	}
+	if tol.TolerationSeconds != nil {
+		parts = append(parts, fmt.Sprintf("for %ds", *tol.TolerationSeconds))
+	}
+	if len(parts) == 0 {
+		return "<none>"
+	}
+	return strings.Join(parts, " ")
+}
+
+func describeControlledBy(refs []metav1.OwnerReference) string {
+	for _, ref := range refs {
+		if ref.Controller != nil && *ref.Controller {
+			return ref.Kind + "/" + ref.Name
+		}
+	}
+	return "<none>"
+}
+
+func formatDescribeNode(pod *corev1.Pod) string {
+	if pod == nil {
+		return "<none>"
+	}
+	if pod.Status.HostIP != "" {
+		return pod.Spec.NodeName + "/" + pod.Status.HostIP
+	}
+	return firstNonEmpty(pod.Spec.NodeName, "<none>")
+}
+
+func formatDescribeTime(ts *metav1.Time) string {
+	if ts == nil || ts.IsZero() {
+		return "<none>"
+	}
+	return ts.Time.Format(time.RFC1123Z)
+}
+
+func findContainerStatus(statuses []corev1.ContainerStatus, name string) *corev1.ContainerStatus {
+	for i := range statuses {
+		if statuses[i].Name == name {
+			return &statuses[i]
+		}
+	}
+	return nil
+}
+
+func describePriority(priority *int32) string {
+	if priority == nil {
+		return "0"
+	}
+	return strconv.Itoa(int(*priority))
 }
 
 func (a *app) fetchMetricRange(ctx context.Context, query string, start, end time.Time, step time.Duration, transform func(float64) float64) (map[string]float64, error) {

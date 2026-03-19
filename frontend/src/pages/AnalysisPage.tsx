@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchContainerMap } from '@/api';
+import { fetchContainerMap, fetchPodDescribe } from '@/api';
 import type { ContainerData } from '@/features/kubernetes/components/ContainerBlock';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import { Card, Text, Metric, Badge, TabGroup, TabList, Tab } from '@tremor/react';
@@ -39,6 +39,12 @@ export default function AnalysisPage() {
 
     // Find the currently selected pod from the URL params
     const selectedPod = containers.find(c => c.namespace === namespaceParam && c.name === podNameParam);
+
+    const { data: podDescribe, isLoading: isDescribeLoading } = useQuery<string>({
+        queryKey: ['podDescribe', selectedPod?.namespace, selectedPod?.name],
+        queryFn: () => fetchPodDescribe(selectedPod!.namespace, selectedPod!.name),
+        enabled: isManifestOpen && !!selectedPod,
+    });
 
     useEffect(() => {
         if (selectedPod) {
@@ -132,7 +138,7 @@ export default function AnalysisPage() {
                                     {/* Actions */}
                                     <div className="pt-6 border-t border-border mt-6 grid grid-cols-2 gap-2">
                                         <button onClick={() => setIsManifestOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 text-xs font-bold rounded hover:bg-indigo-100 transition-colors">
-                                            <FileText className="w-3.5 h-3.5" /> Manifest
+                                            <FileText className="w-3.5 h-3.5" /> Describe
                                         </button>
                                         <button onClick={() => navigate('/dashboard')} className="flex items-center justify-center gap-2 px-4 py-2 bg-muted text-foreground text-xs font-bold rounded hover:bg-muted/80 transition-colors">
                                             <ExternalLink className="w-3.5 h-3.5" /> Go to Node
@@ -193,10 +199,10 @@ export default function AnalysisPage() {
                 <DialogContent className="max-h-[80vh] max-w-3xl flex flex-col overflow-hidden p-0 bg-[#1e1e1e] border-indigo-500/30 text-indigo-100">
                     <DialogHeader className="p-6 border-b border-indigo-500/20 shrink-0">
                         <DialogTitle className="text-xl font-bold flex items-center gap-2 text-white">
-                            <FileText className="w-5 h-5 text-indigo-400" /> {selectedPod?.name} Manifest
+                            <FileText className="w-5 h-5 text-indigo-400" /> {selectedPod?.name} Describe
                         </DialogTitle>
                         <DialogDescription className="text-indigo-300/60">
-                            Kubernetes Object YAML 정의문
+                            `kubectl describe pod` 스타일의 실제 Pod 상세 정보
                         </DialogDescription>
                     </DialogHeader>
                     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -204,46 +210,14 @@ export default function AnalysisPage() {
                             <button
                                 className="sticky top-0 float-right z-10 rounded-md p-2 text-indigo-300 transition-colors hover:bg-white/10"
                                 onClick={() => {
-                                    const yaml = `apiVersion: v1
-kind: Pod
-metadata:
-  name: ${selectedPod?.name}
-  namespace: ${selectedPod?.namespace}
-  labels:
-    app: ${selectedPod?.serviceName}
-spec:
-  containers:
-  - name: container-0
-    image: ${selectedPod?.image}
-    ports:
-    - containerPort: 80`;
-                                    navigator.clipboard.writeText(yaml);
-                                    alert('YAML이 클립보드에 복사되었습니다.');
+                                    navigator.clipboard.writeText(podDescribe || '');
+                                    alert('Describe 내용이 클립보드에 복사되었습니다.');
                                 }}
                             >
-                                Copy YAML
+                                Copy Describe
                             </button>
                             <pre className="clear-both whitespace-pre-wrap break-words text-indigo-200">
-                                {`apiVersion: v1
-kind: Pod
-metadata:
-  name: ${selectedPod?.name}
-  namespace: ${selectedPod?.namespace}
-  labels:
-    app: ${selectedPod?.serviceName}
-spec:
-  containers:
-  - name: container-0
-    image: ${selectedPod?.image}
-    ports:
-    - containerPort: 80
-    resources:
-      limits:
-        cpu: "1"
-        memory: "1Gi"
-      requests:
-        cpu: "0.5"
-        memory: "512Mi"`}
+                                {isDescribeLoading ? 'Loading describe output...' : (podDescribe || 'Describe output is unavailable.')}
                             </pre>
                         </div>
                     </div>
