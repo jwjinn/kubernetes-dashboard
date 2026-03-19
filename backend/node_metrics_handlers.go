@@ -287,14 +287,58 @@ func (a *app) queryNodeRange(ctx context.Context, query string, start, end time.
 }
 
 func (a *app) nodeMetricExpr(expr string) string {
+	if strings.EqualFold(strings.TrimSpace(a.nodeMetricsMappingStrategy), "instance") ||
+		strings.EqualFold(strings.TrimSpace(a.nodeMetricsMappingStrategy), "direct") {
+		return expr
+	}
 	return fmt.Sprintf("(%s) * on(instance) group_left(node) (%s)", expr, a.nodeInstanceMapExpr())
 }
 
 func (a *app) nodeInstanceMapExpr() string {
+	switch strings.ToLower(strings.TrimSpace(a.nodeMetricsMappingStrategy)) {
+	case "kube_pod_info", "pod":
+		return a.nodeInstanceMapFromKubePodInfo()
+	case "node_uname_info", "uname":
+		return a.nodeInstanceMapFromNodeUname()
+	case "instance", "direct":
+		return "vector(1)"
+	case "", "auto":
+		return fmt.Sprintf(
+			`(%s) or (%s)`,
+			a.nodeInstanceMapFromKubePodInfo(),
+			a.nodeInstanceMapFromNodeUname(),
+		)
+	default:
+		log.Printf("unknown NODE_METRICS_MAPPING_STRATEGY=%q, falling back to auto", a.nodeMetricsMappingStrategy)
+		return fmt.Sprintf(
+			`(%s) or (%s)`,
+			a.nodeInstanceMapFromKubePodInfo(),
+			a.nodeInstanceMapFromNodeUname(),
+		)
+	}
+}
+
+func (a *app) nodeInstanceMapFromKubePodInfo() string {
 	return fmt.Sprintf(
-		`max by(instance, node) ((up%s) * on(pod, namespace) group_left(node) kube_pod_info{pod=~"node-exporter-.*",node!=""})`,
+		`max by(instance, node) ((up%s) * on(pod, namespace) group_left(node) %s%s)`,
+		a.nodeSelector(),
+		a.nodeMetricsPodInfoMetricName(),
+		a.nodePodInfoSelector(`node!=""`),
+	)
+}
+
+func (a *app) nodeInstanceMapFromNodeUname() string {
+	return fmt.Sprintf(
+		`max by(instance, node) (label_replace(node_uname_info%s, "node", "$1", "nodename", "(.*)"))`,
 		a.nodeSelector(),
 	)
+}
+
+func (a *app) nodeMetricsPodInfoMetricName() string {
+	if metric := strings.TrimSpace(a.nodeMetricsPodInfoMetric); metric != "" {
+		return metric
+	}
+	return "kube_pod_info"
 }
 
 func (a *app) nodeSelector(extra ...string) string {
@@ -304,6 +348,21 @@ func (a *app) nodeSelector(extra ...string) string {
 	}
 	if cluster := strings.TrimSpace(a.nodeCluster); cluster != "" {
 		matchers = append(matchers, fmt.Sprintf(`cluster=~"%s"`, cluster))
+	}
+	matchers = append(matchers, extra...)
+	if len(matchers) == 0 {
+		return ""
+	}
+	return "{" + strings.Join(matchers, ",") + "}"
+}
+
+func (a *app) nodePodInfoSelector(extra ...string) string {
+	matchers := make([]string, 0, len(extra)+2)
+	if namespace := strings.TrimSpace(a.nodeMetricsPodNamespace); namespace != "" {
+		matchers = append(matchers, fmt.Sprintf(`namespace="%s"`, namespace))
+	}
+	if podRegex := strings.TrimSpace(a.nodeMetricsPodNameRegex); podRegex != "" {
+		matchers = append(matchers, fmt.Sprintf(`pod=~"%s"`, podRegex))
 	}
 	matchers = append(matchers, extra...)
 	if len(matchers) == 0 {

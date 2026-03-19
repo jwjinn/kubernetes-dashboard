@@ -27,22 +27,26 @@ const (
 )
 
 type app struct {
-	kubeClient     kubernetes.Interface
-	clusterCache   *clusterCache
-	responseCache  *ttlCache
-	observability  *observabilityClient
-	nodeMetricsJob string
-	nodeCluster    string
-	summaryTTL     time.Duration
-	topologyTTL    time.Duration
-	containersTTL  time.Duration
-	metricsTTL     time.Duration
-	acceleratorTTL time.Duration
-	logsTTL        time.Duration
-	tracesTTL      time.Duration
-	authEnabled    bool
-	allowedOrigin  string
-	tokenVerifier  *oidc.IDTokenVerifier
+	kubeClient                 kubernetes.Interface
+	clusterCache               *clusterCache
+	responseCache              *ttlCache
+	observability              *observabilityClient
+	nodeMetricsJob             string
+	nodeCluster                string
+	nodeMetricsMappingStrategy string
+	nodeMetricsPodNamespace    string
+	nodeMetricsPodNameRegex    string
+	nodeMetricsPodInfoMetric   string
+	summaryTTL                 time.Duration
+	topologyTTL                time.Duration
+	containersTTL              time.Duration
+	metricsTTL                 time.Duration
+	acceleratorTTL             time.Duration
+	logsTTL                    time.Duration
+	tracesTTL                  time.Duration
+	authEnabled                bool
+	allowedOrigin              string
+	tokenVerifier              *oidc.IDTokenVerifier
 }
 
 type clusterSummaryResponse struct {
@@ -85,20 +89,24 @@ func main() {
 	}
 
 	application := &app{
-		kubeClient:     kubeClient,
-		authEnabled:    strings.EqualFold(os.Getenv("AUTH_ENABLED"), "true"),
-		allowedOrigin:  envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
-		responseCache:  newTTLCache(),
-		observability:  newObservabilityClient(),
-		nodeMetricsJob: envOrDefault("NODE_METRICS_JOB", "node-exporter"),
-		nodeCluster:    strings.TrimSpace(os.Getenv("NODE_METRICS_CLUSTER")),
-		summaryTTL:     durationEnvOrDefault("SUMMARY_CACHE_TTL", 10*time.Second),
-		topologyTTL:    durationEnvOrDefault("TOPOLOGY_CACHE_TTL", 15*time.Second),
-		containersTTL:  10 * time.Second,
-		metricsTTL:     30 * time.Second,
-		acceleratorTTL: 15 * time.Second,
-		logsTTL:        5 * time.Second,
-		tracesTTL:      15 * time.Second,
+		kubeClient:                 kubeClient,
+		authEnabled:                strings.EqualFold(os.Getenv("AUTH_ENABLED"), "true"),
+		allowedOrigin:              envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
+		responseCache:              newTTLCache(),
+		observability:              newObservabilityClient(),
+		nodeMetricsJob:             envOrDefault("NODE_METRICS_JOB", "node-exporter"),
+		nodeCluster:                strings.TrimSpace(os.Getenv("NODE_METRICS_CLUSTER")),
+		nodeMetricsMappingStrategy: envOrDefault("NODE_METRICS_MAPPING_STRATEGY", "auto"),
+		nodeMetricsPodNamespace:    strings.TrimSpace(os.Getenv("NODE_METRICS_POD_NAMESPACE")),
+		nodeMetricsPodNameRegex:    envOrDefault("NODE_METRICS_POD_NAME_REGEX", "node-exporter-.*"),
+		nodeMetricsPodInfoMetric:   envOrDefault("NODE_METRICS_POD_INFO_METRIC", "kube_pod_info"),
+		summaryTTL:                 durationEnvOrDefault("SUMMARY_CACHE_TTL", 10*time.Second),
+		topologyTTL:                durationEnvOrDefault("TOPOLOGY_CACHE_TTL", 15*time.Second),
+		containersTTL:              10 * time.Second,
+		metricsTTL:                 30 * time.Second,
+		acceleratorTTL:             15 * time.Second,
+		logsTTL:                    5 * time.Second,
+		tracesTTL:                  15 * time.Second,
 	}
 
 	cacheResync := durationEnvOrDefault("KUBERNETES_CACHE_RESYNC", 10*time.Minute)
@@ -140,6 +148,15 @@ func main() {
 	log.Printf("backend listening on http://localhost:%s", port)
 	log.Printf("kubernetes auth enabled: %t", application.authEnabled)
 	log.Printf("informer cache resync interval: %s", cacheResync)
+	log.Printf(
+		"node metrics mapping: strategy=%s job=%s cluster=%q podNamespace=%q podNameRegex=%q podInfoMetric=%s",
+		application.nodeMetricsMappingStrategy,
+		application.nodeMetricsJob,
+		application.nodeCluster,
+		application.nodeMetricsPodNamespace,
+		application.nodeMetricsPodNameRegex,
+		application.nodeMetricsPodInfoMetric,
+	)
 
 	if err := http.ListenAndServe(addr, application.withMiddleware(mux)); err != nil {
 		log.Fatal(err)
