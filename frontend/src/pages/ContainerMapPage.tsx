@@ -21,7 +21,8 @@ export default function ContainerMapPage() {
     const { data: containers = [], isLoading } = useQuery<ContainerData[]>({
         queryKey: ['containerMap'],
         queryFn: fetchContainerMap,
-        refetchInterval: 5000
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
     });
 
     const handleContainerClick = (container: ContainerData) => {
