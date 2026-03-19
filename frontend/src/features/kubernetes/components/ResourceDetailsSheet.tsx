@@ -73,7 +73,7 @@ export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDet
                             </TabsContent>
 
                             <TabsContent value="events" className="h-full m-0 p-0">
-                                <PodEventsTab podName={container.name} />
+                                <PodEventsTab namespace={container.namespace} podName={container.name} />
                             </TabsContent>
                         </div>
                     </Tabs>

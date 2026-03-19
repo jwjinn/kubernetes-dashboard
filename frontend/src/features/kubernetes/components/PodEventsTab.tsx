@@ -1,34 +1,22 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchK8sEvents } from '@/api';
+import { fetchK8sEvents, type K8sEvent } from '@/api';
 import { Badge } from '@tremor/react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertCircle, CheckCircle2, Info, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface Event {
-    id: number;
-    type: string;
-    reason: string;
-    message: string;
-    count: number;
-    lastTimestamp: string;
-    object: string;
-}
-
 interface PodEventsTabProps {
+    namespace?: string;
     podName: string;
 }
 
-export function PodEventsTab({ podName }: PodEventsTabProps) {
-    const { data: events = [], isLoading } = useQuery<Event[]>({
-        queryKey: ['k8sEvents'],
-        queryFn: fetchK8sEvents
+export function PodEventsTab({ namespace, podName }: PodEventsTabProps) {
+    const { data: podEvents = [], isLoading } = useQuery<K8sEvent[]>({
+        queryKey: ['k8sEvents', namespace, podName],
+        queryFn: () => fetchK8sEvents({ namespace, podName }),
+        enabled: !!podName,
     });
-
-    // Filter events for this specific pod
-    // In a real app, the API would take a podName filter
-    const podEvents = events.filter(e => e.object.includes(podName));
 
     if (isLoading) {
         return (
@@ -74,7 +62,7 @@ export function PodEventsTab({ podName }: PodEventsTabProps) {
                                         {event.reason}
                                     </Badge>
                                     <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
-                                        <Clock className="w-3 h-3" /> {event.lastTimestamp}
+                                        <Clock className="w-3 h-3" /> {new Date(event.lastTimestamp).toLocaleString()}
                                     </span>
                                 </div>
                                 {event.count > 1 && (

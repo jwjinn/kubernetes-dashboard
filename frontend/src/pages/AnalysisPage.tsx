@@ -196,7 +196,7 @@ export default function AnalysisPage() {
                                 )}
 
                                 {selectedTab === 3 && (
-                                    <EventsTab />
+                                    <EventsTab namespace={selectedPod?.namespace} podName={selectedPod?.name} />
                                 )}
                             </div>
                         </TabGroup>

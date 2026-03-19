@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type containerMapItem struct {
@@ -69,6 +71,20 @@ type traceEntry struct {
 	StartTime string   `json:"startTime"`
 	Pod       string   `json:"pod"`
 	Tags      []string `json:"tags"`
+}
+
+type k8sEventItem struct {
+	ID            string `json:"id"`
+	Type          string `json:"type"`
+	Reason        string `json:"reason"`
+	Message       string `json:"message"`
+	Count         int32  `json:"count"`
+	LastTimestamp string `json:"lastTimestamp"`
+	Component     string `json:"component"`
+	Object        string `json:"object"`
+	Namespace     string `json:"namespace"`
+	PodName       string `json:"podName,omitempty"`
+	Node          string `json:"node,omitempty"`
 }
 
 func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +280,76 @@ func (a *app) handleK8sMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
+func (a *app) handleK8sEvents(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	podName := strings.TrimSpace(r.URL.Query().Get("podName"))
+
+	cacheKey := fmt.Sprintf("events:%s:%s", namespace, podName)
+	payload, err := a.responseCache.GetOrSet(cacheKey, 15*time.Second, func() (any, error) {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		eventNamespace := namespace
+		if eventNamespace == "" {
+			eventNamespace = metav1.NamespaceAll
+		}
+
+		eventList, err := a.kubeClient.CoreV1().Events(eventNamespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list kubernetes events: %w", err)
+		}
+
+		items := make([]k8sEventItem, 0, len(eventList.Items))
+		for _, event := range eventList.Items {
+			if podName != "" {
+				if event.InvolvedObject.Kind != "Pod" || event.InvolvedObject.Name != podName {
+					continue
+				}
+				if namespace != "" && event.InvolvedObject.Namespace != namespace {
+					continue
+				}
+			}
+
+			lastTime := event.LastTimestamp.Time
+			if lastTime.IsZero() {
+				lastTime = event.EventTime.Time
+			}
+			if lastTime.IsZero() {
+				lastTime = event.FirstTimestamp.Time
+			}
+			if lastTime.IsZero() {
+				lastTime = event.CreationTimestamp.Time
+			}
+
+			items = append(items, k8sEventItem{
+				ID:            string(event.UID),
+				Type:          event.Type,
+				Reason:        event.Reason,
+				Message:       event.Message,
+				Count:         event.Count,
+				LastTimestamp: lastTime.Format(time.RFC3339),
+				Component:     firstNonEmpty(event.Source.Component, event.ReportingController, "-"),
+				Object:        fmt.Sprintf("%s/%s", strings.ToLower(event.InvolvedObject.Kind), event.InvolvedObject.Name),
+				Namespace:     firstNonEmpty(event.Namespace, event.InvolvedObject.Namespace, "-"),
+				PodName:       podNameFromEvent(event),
+				Node:          event.Source.Host,
+			})
+		}
+
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].LastTimestamp > items[j].LastTimestamp
+		})
+
+		return items, nil
+	})
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, payload)
+}
+
 func (a *app) handleLogs(w http.ResponseWriter, r *http.Request) {
 	podName := r.URL.Query().Get("pod")
 	level := strings.ToUpper(r.URL.Query().Get("level"))
@@ -401,6 +487,13 @@ func (a *app) loadPodInstantMetrics(ctx context.Context) (map[string]float64, ma
 	}
 
 	return promVectorByPod(cpuResults), promVectorByPod(memResults), promVectorByPod(txResults)
+}
+
+func podNameFromEvent(event corev1.Event) string {
+	if event.InvolvedObject.Kind == "Pod" {
+		return event.InvolvedObject.Name
+	}
+	return ""
 }
 
 func (a *app) fetchMetricRange(ctx context.Context, query string, start, end time.Time, step time.Duration, transform func(float64) float64) (map[string]float64, error) {

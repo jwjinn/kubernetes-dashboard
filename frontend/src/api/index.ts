@@ -186,8 +186,26 @@ export const fetchAcceleratorTrends = async (type: 'GPU' | 'NPU' = 'GPU') => {
     return response.json();
 };
 
-export const fetchK8sEvents = async () => {
-    const response = await apiFetch('/api/k8s/events');
+export interface K8sEvent {
+    id: string;
+    type: string;
+    reason: string;
+    message: string;
+    count: number;
+    lastTimestamp: string;
+    component: string;
+    object: string;
+    namespace: string;
+    podName?: string;
+    node?: string;
+}
+
+export const fetchK8sEvents = async (params?: { namespace?: string; podName?: string }): Promise<K8sEvent[]> => {
+    const search = new URLSearchParams();
+    if (params?.namespace) search.set('namespace', params.namespace);
+    if (params?.podName) search.set('podName', params.podName);
+    const query = search.toString();
+    const response = await apiFetch(`/api/k8s/events${query ? `?${query}` : ''}`);
     if (!response.ok) throw new Error('Failed to fetch events');
     return response.json();
 };
