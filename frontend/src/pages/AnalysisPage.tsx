@@ -4,11 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchContainerMap } from '@/api';
 import type { ContainerData } from '@/features/kubernetes/components/ContainerBlock';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
-import { Card, Text, Metric, Grid, Badge, Flex, TabGroup, TabList, Tab, TabPanels, TabPanel, TextInput } from '@tremor/react';
+import { Card, Text, Metric, Badge, TabGroup, TabList, Tab } from '@tremor/react';
 import {
-    Search, Filter, ChevronRight, Activity, FileText,
-    Share2, History, Zap, Settings, Box, LayoutGrid,
-    AlertCircle, CheckCircle2, Info, ChevronDown, ListFilter, X
+    Activity, FileText, History, Box, Info
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -18,19 +16,10 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { TraceTab } from '@/features/analysis/components/TraceTab';
 import { EventsTab } from '@/features/analysis/components/EventsTab';
 import { MetricsTab } from '@/features/kubernetes/components/MetricsTab';
-import { ResourceRelationshipTab } from '@/features/analysis/components/ResourceRelationshipTab';
 import { LogViewer } from '@/features/logs/components/LogViewer';
-import { MoreVertical, ExternalLink } from 'lucide-react';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { ExternalLink } from 'lucide-react';
 
 export default function AnalysisPage() {
     const [searchParams] = useSearchParams();
@@ -98,7 +87,7 @@ export default function AnalysisPage() {
                                         <Info className="w-4 h-4 text-indigo-500" /> 대상 상세 정보
                                     </Text>
                                 </div>
-                                <div className="p-4 space-y-4 overflow-y-auto">
+                            <div className="p-4 space-y-4 overflow-y-auto">
                                     {/* Quick Info Grid */}
                                     <div className="grid grid-cols-2 gap-3 mb-6">
                                         <div className="bg-muted/30 p-3 rounded-lg border border-border">
@@ -168,7 +157,6 @@ export default function AnalysisPage() {
                     <div className="flex-1 flex flex-col border border-border rounded-xl bg-card shadow-lg overflow-hidden">
                         <TabGroup index={selectedTab} onIndexChange={setSelectedTab} className="flex flex-col h-full">
                             <TabList variant="line" className="px-4 border-b border-border bg-muted/10 h-12 shrink-0">
-                                <Tab className="gap-2 h-full"><Share2 className="w-4 h-4" /> 리소스 관계</Tab>
                                 <Tab className="gap-2 h-full"><Activity className="w-4 h-4" /> 메트릭스</Tab>
                                 <Tab className="gap-2 h-full"><FileText className="w-4 h-4" /> 로그</Tab>
                                 <Tab className="gap-2 h-full"><History className="w-4 h-4" /> 이벤트</Tab>
@@ -176,14 +164,10 @@ export default function AnalysisPage() {
 
                             <div className="flex-1 overflow-y-auto p-6 relative">
                                 {selectedTab === 0 && (
-                                    <ResourceRelationshipTab podId={expandedPodId} />
-                                )}
-
-                                {selectedTab === 1 && (
                                     <MetricsTab containerId={expandedPodId || 'demo'} />
                                 )}
 
-                                {selectedTab === 2 && (
+                                {selectedTab === 1 && (
                                     <div className="h-full flex flex-col">
                                         {selectedPod ? (
                                             <LogViewer podName={selectedPod.name} height="h-full" />
@@ -195,7 +179,7 @@ export default function AnalysisPage() {
                                     </div>
                                 )}
 
-                                {selectedTab === 3 && (
+                                {selectedTab === 2 && (
                                     <EventsTab namespace={selectedPod?.namespace} podName={selectedPod?.name} />
                                 )}
                             </div>
