@@ -26,6 +26,8 @@ type containerMapItem struct {
 	HasMemRequest   bool             `json:"hasMemRequest"`
 	MemUsagePercent int              `json:"memUsagePercent"`
 	NPURequest      int              `json:"npuRequest"`
+	PodNPUObserved  int              `json:"podNpuObservedPercent"`
+	PodNPUDevices   int              `json:"podNpuObservedDevices"`
 	NodeNPUCapacity int              `json:"nodeNpuCapacity"`
 	NodeNPUActive   int              `json:"nodeNpuActive"`
 	NodeNPUObserved int              `json:"nodeNpuObservedPercent"`
@@ -85,6 +87,7 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 
 		cpuUsage, memUsage, txUsage := a.loadPodInstantMetrics(ctx)
 		nodeTelemetry := a.loadNodeNPUTelemetry(ctx)
+		podTelemetry := a.loadPodNPUTelemetry(ctx)
 		nodeCapacity := make(map[string]int, len(nodes))
 		for _, node := range nodes {
 			nodeCapacity[node.Name] = acceleratorCapacity(node.Status.Allocatable, "NPU")
@@ -100,6 +103,7 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 			memRequestBytes, hasMemRequest := podMemoryRequestBytes(pod)
 			npuRequest := acceleratorRequestCount(pod, "NPU")
 			nodeSummary := nodeTelemetry[pod.Spec.NodeName]
+			podSummary := podTelemetry[key]
 			status, statusReason := podVisualStatus(*pod)
 
 			firstContainer := pod.Spec.Containers[0]
@@ -118,9 +122,11 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 				HasMemRequest:   hasMemRequest,
 				MemUsagePercent: usagePercent(memUsage[key], float64(memRequestBytes), -1),
 				NPURequest:      npuRequest,
+				PodNPUObserved:  podSummary.ObservedPercent(),
+				PodNPUDevices:   podSummary.Active,
 				NodeNPUCapacity: nodeCapacity[pod.Spec.NodeName],
 				NodeNPUActive:   nodeSummary.Active,
-				NodeNPUObserved: nodeSummary.ObservedPercent(),
+				NodeNPUObserved: nodeSummary.ActivityPercent(),
 				TXCount:         int(txUsage[key] * 1000),
 				HasTrace:        false,
 				Image:           firstContainer.Image,
@@ -139,11 +145,19 @@ func (a *app) handleContainers(w http.ResponseWriter, r *http.Request) {
 }
 
 type nodeNPUTelemetrySummary struct {
-	Active int
-	Total  int
+	Active  int
+	Total   int
+	UtilSum float64
 }
 
 func (s nodeNPUTelemetrySummary) ObservedPercent() int {
+	if s.Active <= 0 {
+		return 0
+	}
+	return int(clampFloat(s.UtilSum/float64(s.Active), 0, 100))
+}
+
+func (s nodeNPUTelemetrySummary) ActivityPercent() int {
 	if s.Total <= 0 {
 		return 0
 	}
@@ -497,8 +511,47 @@ func (a *app) loadNodeNPUTelemetry(ctx context.Context) map[string]nodeNPUTeleme
 		item.Total++
 		if isTelemetryActive(state) {
 			item.Active++
+			item.UtilSum += state.Utilization
 		}
 		summary[state.Hostname] = item
+	}
+
+	return summary
+}
+
+func (a *app) loadPodNPUTelemetry(ctx context.Context) map[string]nodeNPUTelemetrySummary {
+	summary := map[string]nodeNPUTelemetrySummary{}
+	if a.observability == nil {
+		return summary
+	}
+
+	utilResults, err := a.observability.queryMetricsInstant(ctx, npuMetricByDevice(npuUtilMetric()))
+	if err != nil {
+		log.Printf("failed to query npu utilization metrics for pod container map summary: %v", err)
+		return summary
+	}
+	dramResults, err := a.observability.queryMetricsInstant(ctx, npuMetricByDevice(npuDramUsedMetric()))
+	if err != nil {
+		log.Printf("failed to query npu dram metrics for pod container map summary: %v", err)
+		return summary
+	}
+
+	states := mergeNPUDeviceStates(npuMetricSet{
+		util:     utilResults,
+		dramUsed: dramResults,
+	})
+	for _, state := range states {
+		if strings.TrimSpace(state.Namespace) == "" || strings.TrimSpace(state.Pod) == "" {
+			continue
+		}
+		key := state.Namespace + "/" + state.Pod
+		item := summary[key]
+		item.Total++
+		if isTelemetryActive(state) {
+			item.Active++
+			item.UtilSum += state.Utilization
+		}
+		summary[key] = item
 	}
 
 	return summary

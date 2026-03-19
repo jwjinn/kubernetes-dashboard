@@ -23,6 +23,8 @@ export interface ContainerData {
     hasMemRequest?: boolean;
     memUsagePercent: number;
     npuRequest?: number;
+    podNpuObservedPercent?: number;
+    podNpuObservedDevices?: number;
     nodeNpuCapacity?: number;
     nodeNpuActive?: number;
     nodeNpuObservedPercent?: number;
@@ -133,15 +135,13 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
                                     <>
                                         <div className="flex justify-between items-center text-[9px] mt-0.5 font-bold">
                                             <span>NPU</span>
-                                            <span>{data.nodeNpuObservedPercent ?? 0}%</span>
+                                            <span>{data.podNpuObservedPercent ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-black/10 h-1.5 rounded-full overflow-hidden">
-                                            <div className="bg-violet-600/85 h-full transition-all duration-500" style={{ width: `${meterWidth(data.nodeNpuObservedPercent ?? 0, true)}%` }} />
+                                            <div className="bg-violet-600/85 h-full transition-all duration-500" style={{ width: `${meterWidth(data.podNpuObservedPercent ?? 0, true)}%` }} />
                                         </div>
                                     </>
-                                ) : (
-                                    <div className="mt-1 text-[9px] font-semibold text-emerald-800/80">CPU</div>
-                                )}
+                                ) : null}
                             </div>
                         </div>
 
@@ -177,19 +177,19 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
                         {isNpu && (
                             <>
                                 <div className="flex flex-col">
-                                    <span className="text-muted-foreground">NPU Requested</span>
-                                    <span className="font-medium">{data.npuRequest ?? 0}</span>
+                                    <span className="text-muted-foreground">Observed NPU Util</span>
+                                    <span className="font-medium">{data.podNpuObservedPercent ?? 0}%</span>
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-muted-foreground">Node NPU Active</span>
-                                    <span className="font-medium">{data.nodeNpuActive ?? 0} / {data.nodeNpuCapacity ?? 0}</span>
+                                    <span className="text-muted-foreground">Observed NPU Devices</span>
+                                    <span className="font-medium">{data.podNpuObservedDevices ?? 0}</span>
                                 </div>
                             </>
                         )}
                     </div>
                     <div className="pt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         <Info className="w-3 h-3" />
-                        <span>{isNpu ? 'NPU workload shows node-level observed NPU activity.' : 'Click to view detailed metrics'}</span>
+                        <span>{isNpu ? 'NPU workload shows pod-level observed NPU utilization.' : 'Click to view detailed metrics'}</span>
                     </div>
                 </TooltipContent>
             </Tooltip>
