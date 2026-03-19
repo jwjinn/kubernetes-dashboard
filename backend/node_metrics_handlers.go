@@ -13,22 +13,22 @@ import (
 )
 
 type nodeDashboardNode struct {
-	NodeID        string  `json:"nodeId"`
-	CPUUtil       float64 `json:"cpuUtil"`
-	MemTotal      float64 `json:"memTotal"`
-	MemUsed       float64 `json:"memUsed"`
-	MemBuffers    float64 `json:"memBuffers"`
-	MemCached     float64 `json:"memCached"`
-	DiskReads     float64 `json:"diskReads"`
-	DiskWrites    float64 `json:"diskWrites"`
-	FSUsedPercent float64 `json:"fsUsedPercent"`
-	NetRx         float64 `json:"netRx"`
-	NetTx         float64 `json:"netTx"`
+	NodeID         string  `json:"nodeId"`
+	CPUUtil        float64 `json:"cpuUtil"`
+	MemTotal       float64 `json:"memTotal"`
+	MemUsed        float64 `json:"memUsed"`
+	MemBuffers     float64 `json:"memBuffers"`
+	MemCached      float64 `json:"memCached"`
+	DiskReads      float64 `json:"diskReads"`
+	DiskWrites     float64 `json:"diskWrites"`
+	FSUsedPercent  float64 `json:"fsUsedPercent"`
+	NetRx          float64 `json:"netRx"`
+	NetTx          float64 `json:"netTx"`
 	TCPEstablished float64 `json:"tcpEstablished"`
-	Load1m        float64 `json:"load1m"`
-	Load5m        float64 `json:"load5m"`
-	Load15m       float64 `json:"load15m"`
-	Status        string  `json:"status"`
+	Load1m         float64 `json:"load1m"`
+	Load5m         float64 `json:"load5m"`
+	Load15m        float64 `json:"load15m"`
+	Status         string  `json:"status"`
 }
 
 type nodeDashboardSeries struct {
@@ -287,7 +287,14 @@ func (a *app) queryNodeRange(ctx context.Context, query string, start, end time.
 }
 
 func (a *app) nodeMetricExpr(expr string) string {
-	return fmt.Sprintf("(%s) * on(instance) group_left(nodename) node_uname_info%s", expr, a.nodeSelector())
+	return fmt.Sprintf("(%s) * on(instance) group_left(node) (%s)", expr, a.nodeInstanceMapExpr())
+}
+
+func (a *app) nodeInstanceMapExpr() string {
+	return fmt.Sprintf(
+		`max by(instance, node) ((up%s) * on(pod, namespace) group_left(node) kube_pod_info{pod=~"node-exporter-.*",node!=""})`,
+		a.nodeSelector(),
+	)
 }
 
 func (a *app) nodeSelector(extra ...string) string {
@@ -346,7 +353,7 @@ func buildNodeSeries(timeAxis []string, nodeNames []string, values map[string]ma
 }
 
 func metricNodeName(metric map[string]string) string {
-	for _, key := range []string{"nodename", "node", "hostname"} {
+	for _, key := range []string{"node", "nodename", "hostname"} {
 		if value := strings.TrimSpace(metric[key]); value != "" {
 			return value
 		}
