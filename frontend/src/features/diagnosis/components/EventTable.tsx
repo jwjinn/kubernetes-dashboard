@@ -9,17 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Info, AlertCircle } from 'lucide-react';
-
-interface K8sEvent {
-    id: number;
-    type: 'Normal' | 'Warning';
-    reason: string;
-    message: string;
-    count: number;
-    lastTimestamp: string;
-    component: string;
-    object: string;
-}
+import type { K8sEvent } from '@/api';
 
 export function EventTable({ events }: { events: K8sEvent[] }) {
     return (
