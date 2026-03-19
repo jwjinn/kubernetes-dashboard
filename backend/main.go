@@ -432,6 +432,9 @@ func buildTopology(nodes []*corev1.Node, pods []*corev1.Pod, filterNode string) 
 
 		serverNodeID := "node:" + node.Name
 		serverX := float64(serverIndex) * 360
+		parentPositions := map[string]float64{
+			serverNodeID: serverX,
+		}
 
 		flowNodes = append(flowNodes, flowNode{
 			ID:       serverNodeID,
@@ -459,6 +462,7 @@ func buildTopology(nodes []*corev1.Node, pods []*corev1.Pod, filterNode string) 
 						"status": nodeHealthStatus(*node),
 					},
 				})
+				parentPositions[gpuID] = serverX + float64(gpuIndex*170)
 				flowEdges = append(flowEdges, flowEdge{
 					ID:     fmt.Sprintf("edge:%s:%s", serverNodeID, gpuID),
 					Source: serverNodeID,
@@ -468,38 +472,77 @@ func buildTopology(nodes []*corev1.Node, pods []*corev1.Pod, filterNode string) 
 		}
 
 		podOffset := 0
+		podsByParent := make(map[string][]*corev1.Pod)
 		for _, pod := range pods {
 			if pod.Spec.NodeName != node.Name || shouldSkipPod(*pod) {
 				continue
 			}
 
-			podID := fmt.Sprintf("pod:%s:%s", pod.Namespace, pod.Name)
-			podX := serverX + float64((podOffset%3)*170)
-			podY := 360 + float64((podOffset/3)*120)
-
-			flowNodes = append(flowNodes, flowNode{
-				ID:       podID,
-				Type:     "podNode",
-				Position: flowPosition{X: podX, Y: podY},
-				Data: map[string]any{
-					"label":     pod.Name,
-					"namespace": pod.Namespace,
-					"status":    podHealthStatus(*pod),
-				},
-			})
-
 			parentID := serverNodeID
 			if len(gpuAnchorIDs) > 0 {
 				parentID = gpuAnchorIDs[podOffset%len(gpuAnchorIDs)]
 			}
-
-			flowEdges = append(flowEdges, flowEdge{
-				ID:     fmt.Sprintf("edge:%s:%s", parentID, podID),
-				Source: parentID,
-				Target: podID,
-			})
+			podsByParent[parentID] = append(podsByParent[parentID], pod)
 
 			podOffset++
+		}
+
+		parentIDs := gpuAnchorIDs
+		if len(parentIDs) == 0 {
+			parentIDs = []string{serverNodeID}
+		}
+
+		for _, parentID := range parentIDs {
+			parentPods := podsByParent[parentID]
+			parentX := parentPositions[parentID]
+			visibleCount := min(len(parentPods), 3)
+
+			for visibleIndex := 0; visibleIndex < visibleCount; visibleIndex++ {
+				pod := parentPods[visibleIndex]
+				podID := fmt.Sprintf("pod:%s:%s", pod.Namespace, pod.Name)
+				podX := parentX + float64((visibleIndex-1)*120)
+				podY := 360.0
+
+				flowNodes = append(flowNodes, flowNode{
+					ID:       podID,
+					Type:     "podNode",
+					Position: flowPosition{X: podX, Y: podY},
+					Data: map[string]any{
+						"label":     pod.Name,
+						"namespace": pod.Namespace,
+						"status":    podHealthStatus(*pod),
+					},
+				})
+
+				flowEdges = append(flowEdges, flowEdge{
+					ID:     fmt.Sprintf("edge:%s:%s", parentID, podID),
+					Source: parentID,
+					Target: podID,
+				})
+			}
+
+			hiddenCount := len(parentPods) - visibleCount
+			if hiddenCount > 0 {
+				summaryID := fmt.Sprintf("pod-summary:%s", parentID)
+				flowNodes = append(flowNodes, flowNode{
+					ID:       summaryID,
+					Type:     "podNode",
+					Position: flowPosition{X: parentX, Y: 480},
+					Data: map[string]any{
+						"label":       fmt.Sprintf("+%d more", hiddenCount),
+						"namespace":   "collapsed",
+						"status":      "running",
+						"isSummary":   true,
+						"hiddenCount": hiddenCount,
+					},
+				})
+
+				flowEdges = append(flowEdges, flowEdge{
+					ID:     fmt.Sprintf("edge:%s:%s", parentID, summaryID),
+					Source: parentID,
+					Target: summaryID,
+				})
+			}
 		}
 
 		serverIndex++

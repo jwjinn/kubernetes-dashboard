@@ -4,7 +4,13 @@ import { Box } from 'lucide-react';
 
 interface PodNodeProps {
     id: string;
-    data: { label: string; status: 'running' | 'pending' | 'failed'; namespace: string };
+    data: {
+        label: string;
+        status: 'running' | 'pending' | 'failed';
+        namespace: string;
+        isSummary?: boolean;
+        hiddenCount?: number;
+    };
 }
 
 export const PodNode: React.FC<PodNodeProps> = ({ data }) => {
@@ -13,6 +19,20 @@ export const PodNode: React.FC<PodNodeProps> = ({ data }) => {
         pending: 'bg-yellow-500',
         failed: 'bg-red-500',
     };
+
+    if (data.isSummary) {
+        return (
+            <div className="flex flex-col items-center group relative">
+                <Handle type="target" position={Position.Top} className="w-2 h-2" />
+                <div className="min-w-[72px] rounded-full border border-dashed border-border bg-muted px-3 py-2 text-center text-xs font-bold text-muted-foreground shadow-sm">
+                    +{data.hiddenCount || 0}
+                </div>
+                <div className="mt-2 text-[10px] whitespace-nowrap rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground">
+                    more pods
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col items-center group relative cursor-pointer">
