@@ -17,5 +17,6 @@ data:
   LOGS_BASE_URL: "http://victoria-logs-single-server.observability.svc.cluster.local:9428"
   TRACES_BASE_URL: "http://victoria-traces-vtc-vtselect.observability.svc.cluster.local:10471"
   METRICS_BASE_URL: "http://vmselect-vm.observability.svc.cluster.local:8481"
+  NODE_METRICS_JOB: "node-exporter"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-collector.observability.svc.cluster.local:4318"
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"

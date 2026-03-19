@@ -81,27 +81,158 @@ func (a *app) buildNodeDashboardResponse(ctx context.Context, nodes []*corev1.No
 	}
 	sort.Strings(nodeNames)
 
-	load1Now, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`node_load1`))
-	load5Now, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`node_load5`))
-	load15Now, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`node_load15`))
-	tcpNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`node_netstat_Tcp_CurrEstab`))
-	cpuNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`100 * (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])))`))
-	memTotalNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`node_memory_MemTotal_bytes / 1073741824`))
-	memUsedNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1073741824`))
-	memBuffersNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`node_memory_Buffers_bytes / 1073741824`))
-	memCachedNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`node_memory_Cached_bytes / 1073741824`))
-	fsNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`100 * (1 - (sum by(instance) (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) / sum by(instance) (node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})))`))
-	netRxNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`sum by(instance) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|cali.*|flannel.*|cni.*"}[5m])) / 1048576`))
-	netTxNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`sum by(instance) (rate(node_network_transmit_bytes_total{device!~"lo|veth.*|cali.*|flannel.*|cni.*"}[5m])) / 1048576`))
-	diskReadNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`sum by(instance) (rate(node_disk_read_bytes_total{device!~"loop.*|ram.*|dm-.*"}[5m])) / 1048576`))
-	diskWriteNow, _ := a.queryNodeInstant(ctx, nodeMetricExpr(`sum by(instance) (rate(node_disk_written_bytes_total{device!~"loop.*|ram.*|dm-.*"}[5m])) / 1048576`))
+	load1Now, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_load1%s`, a.nodeSelector()),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	load5Now, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_load5%s`, a.nodeSelector()),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	load15Now, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_load15%s`, a.nodeSelector()),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	tcpNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_netstat_Tcp_CurrEstab%s`, a.nodeSelector()),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	cpuNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`100 * (1 - avg by(instance) (rate(node_cpu_seconds_total%s[5m])))`,
+			a.nodeSelector(`mode="idle"`),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	memTotalNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_memory_MemTotal_bytes%s / 1073741824`, a.nodeSelector()),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	memUsedNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`(node_memory_MemTotal_bytes%s - node_memory_MemAvailable_bytes%s) / 1073741824`,
+			a.nodeSelector(),
+			a.nodeSelector(),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	memBuffersNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_memory_Buffers_bytes%s / 1073741824`, a.nodeSelector()),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	memCachedNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`(node_memory_Cached_bytes%s + node_memory_SReclaimable_bytes%s) / 1073741824`,
+			a.nodeSelector(),
+			a.nodeSelector(),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	fsNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`((node_filesystem_size_bytes%s - node_filesystem_avail_bytes%s) / node_filesystem_size_bytes%s) * 100`,
+			a.nodeSelector(`mountpoint="/"`, `fstype!="rootfs"`),
+			a.nodeSelector(`mountpoint="/"`, `fstype!="rootfs"`),
+			a.nodeSelector(`mountpoint="/"`, `fstype!="rootfs"`),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	netRxNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`sum by(instance) (rate(node_network_receive_bytes_total%s[5m])) / 1048576`,
+			a.nodeSelector(`device!~"lo|veth.*|cali.*|flannel.*|cni.*"`),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	netTxNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`sum by(instance) (rate(node_network_transmit_bytes_total%s[5m])) / 1048576`,
+			a.nodeSelector(`device!~"lo|veth.*|cali.*|flannel.*|cni.*"`),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	diskReadNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`sum by(instance) (irate(node_disk_read_bytes_total%s[5m])) / 1048576`,
+			a.nodeSelector(`device=~"[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+"`),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	diskWriteNow, err := a.queryNodeInstant(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`sum by(instance) (irate(node_disk_written_bytes_total%s[5m])) / 1048576`,
+			a.nodeSelector(`device=~"[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+"`),
+		),
+	))
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
 
-	loadHistory, _ := a.queryNodeRange(ctx, nodeMetricExpr(`node_load1`), start, end, step)
-	tcpHistory, _ := a.queryNodeRange(ctx, nodeMetricExpr(`node_netstat_Tcp_CurrEstab`), start, end, step)
-	cpuHistory, _ := a.queryNodeRange(ctx, nodeMetricExpr(`100 * (1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])))`), start, end, step)
-	memHistory, _ := a.queryNodeRange(ctx, nodeMetricExpr(`(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1073741824`), start, end, step)
-	netHistory, _ := a.queryNodeRange(ctx, nodeMetricExpr(`sum by(instance) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|cali.*|flannel.*|cni.*"}[5m]) + rate(node_network_transmit_bytes_total{device!~"lo|veth.*|cali.*|flannel.*|cni.*"}[5m])) / 1048576`), start, end, step)
-	diskHistory, _ := a.queryNodeRange(ctx, nodeMetricExpr(`sum by(instance) (rate(node_disk_read_bytes_total{device!~"loop.*|ram.*|dm-.*"}[5m]) + rate(node_disk_written_bytes_total{device!~"loop.*|ram.*|dm-.*"}[5m])) / 1048576`), start, end, step)
+	loadHistory, err := a.queryNodeRange(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_load1%s`, a.nodeSelector()),
+	), start, end, step)
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	tcpHistory, err := a.queryNodeRange(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`node_netstat_Tcp_CurrEstab%s`, a.nodeSelector()),
+	), start, end, step)
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	cpuHistory, err := a.queryNodeRange(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`100 * (1 - avg by(instance) (rate(node_cpu_seconds_total%s[5m])))`,
+			a.nodeSelector(`mode="idle"`),
+		),
+	), start, end, step)
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	memHistory, err := a.queryNodeRange(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`(node_memory_MemTotal_bytes%s - node_memory_MemAvailable_bytes%s) / 1073741824`,
+			a.nodeSelector(),
+			a.nodeSelector(),
+		),
+	), start, end, step)
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	netHistory, err := a.queryNodeRange(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`sum by(instance) (rate(node_network_receive_bytes_total%s[5m]) + rate(node_network_transmit_bytes_total%s[5m])) / 1048576`,
+			a.nodeSelector(`device!~"lo|veth.*|cali.*|flannel.*|cni.*"`),
+			a.nodeSelector(`device!~"lo|veth.*|cali.*|flannel.*|cni.*"`),
+		),
+	), start, end, step)
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
+	diskHistory, err := a.queryNodeRange(ctx, a.nodeMetricExpr(
+		fmt.Sprintf(`sum by(instance) (irate(node_disk_read_bytes_total%s[5m]) + irate(node_disk_written_bytes_total%s[5m])) / 1048576`,
+			a.nodeSelector(`device=~"[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+"`),
+			a.nodeSelector(`device=~"[a-z]+|nvme[0-9]+n[0-9]+|mmcblk[0-9]+"`),
+		),
+	), start, end, step)
+	if err != nil {
+		return nodeDashboardResponse{}, err
+	}
 
 	rows := make([]nodeDashboardNode, 0, len(nodeNames))
 	for _, nodeName := range nodeNames {
@@ -155,8 +286,23 @@ func (a *app) queryNodeRange(ctx context.Context, query string, start, end time.
 	return promRangeByNode(results), nil
 }
 
-func nodeMetricExpr(expr string) string {
-	return fmt.Sprintf("(%s) * on(instance) group_left(nodename) node_uname_info", expr)
+func (a *app) nodeMetricExpr(expr string) string {
+	return fmt.Sprintf("(%s) * on(instance) group_left(nodename) node_uname_info%s", expr, a.nodeSelector())
+}
+
+func (a *app) nodeSelector(extra ...string) string {
+	matchers := make([]string, 0, len(extra)+2)
+	if job := strings.TrimSpace(a.nodeMetricsJob); job != "" {
+		matchers = append(matchers, fmt.Sprintf(`job="%s"`, job))
+	}
+	if cluster := strings.TrimSpace(a.nodeCluster); cluster != "" {
+		matchers = append(matchers, fmt.Sprintf(`cluster=~"%s"`, cluster))
+	}
+	matchers = append(matchers, extra...)
+	if len(matchers) == 0 {
+		return ""
+	}
+	return "{" + strings.Join(matchers, ",") + "}"
 }
 
 func promVectorByNode(results []promResult) map[string]float64 {

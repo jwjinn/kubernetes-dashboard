@@ -31,6 +31,8 @@ type app struct {
 	clusterCache   *clusterCache
 	responseCache  *ttlCache
 	observability  *observabilityClient
+	nodeMetricsJob string
+	nodeCluster    string
 	summaryTTL     time.Duration
 	topologyTTL    time.Duration
 	containersTTL  time.Duration
@@ -88,6 +90,8 @@ func main() {
 		allowedOrigin:  envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
 		responseCache:  newTTLCache(),
 		observability:  newObservabilityClient(),
+		nodeMetricsJob: envOrDefault("NODE_METRICS_JOB", "node-exporter"),
+		nodeCluster:    strings.TrimSpace(os.Getenv("NODE_METRICS_CLUSTER")),
 		summaryTTL:     durationEnvOrDefault("SUMMARY_CACHE_TTL", 10*time.Second),
 		topologyTTL:    durationEnvOrDefault("TOPOLOGY_CACHE_TTL", 15*time.Second),
 		containersTTL:  10 * time.Second,
