@@ -16,10 +16,16 @@ export function LogSourceTabs({ namespace, podName, height = "h-full" }: LogSour
             </TabsList>
 
             <TabsContent value="pod" className="mt-0 h-full">
+                <p className="mb-3 text-xs text-muted-foreground">
+                    Pod Logs: 장애 직후 즉시 확인에 적합
+                </p>
                 <LogViewer namespace={namespace} podName={podName} logSource="pod" height={height} />
             </TabsContent>
 
             <TabsContent value="victoria" className="mt-0 h-full">
+                <p className="mb-3 text-xs text-muted-foreground">
+                    VictoriaLogs: 클러스터 단위 검색과 과거 로그 분석에 적합
+                </p>
                 <LogViewer namespace={namespace} podName={podName} logSource="victoria" height={height} />
             </TabsContent>
         </Tabs>
