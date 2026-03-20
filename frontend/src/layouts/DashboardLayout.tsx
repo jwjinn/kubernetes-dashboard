@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useFilterStore } from '@/store/filterStore';
-import { LayoutDashboard, Settings, Bell, User, Box, Activity, Cpu, BarChart3, Terminal, Server, LogOut } from 'lucide-react';
+import { LayoutDashboard, Bell, User, Box, Activity, Cpu, BarChart3, Server, LogOut } from 'lucide-react';
 import { useAuth } from '@/components/AuthContext';
 import { getEnv } from '@/config/env';
 
@@ -26,15 +26,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         { name: `${acceleratorMode} Trends (통계)`, href: '/accelerator-trend', icon: BarChart3 },
     ];
 
-    const commonBottomItems = [
-        { name: 'Kube Console', href: '/console', icon: Terminal },
-        { name: '로그 (Logs)', href: '/logs', icon: Activity }, // Changed icon to avoid duplicate
-    ];
-
     const navItems = [
         ...baseNavItems,
         ...acceleratorNavItems,
-        ...commonBottomItems
     ];
 
     return (

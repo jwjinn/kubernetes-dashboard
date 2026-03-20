@@ -7,8 +7,6 @@ import WorkloadPage from '@/pages/WorkloadPage';
 import AnalysisPage from '@/pages/AnalysisPage';
 import AcceleratorDashboardPage from '@/pages/AcceleratorDashboardPage';
 import AcceleratorTrendPage from '@/pages/AcceleratorTrendPage';
-import KubeConsolePage from '@/pages/KubeConsolePage';
-import LogsPage from '@/pages/LogsPage';
 import ClusterDashboardPage from '@/pages/ClusterDashboardPage';
 import LoginPage from '@/pages/LoginPage';
 import { Toaster } from '@/components/ui/toaster';
@@ -32,8 +30,6 @@ function App() {
             <Route path="/accelerator" element={<PrivateRoute><AcceleratorDashboardPage /></PrivateRoute>} />
             <Route path="/accelerator-trend" element={<PrivateRoute><AcceleratorTrendPage /></PrivateRoute>} />
             <Route path="/analysis" element={<PrivateRoute><AnalysisPage /></PrivateRoute>} />
-            <Route path="/console" element={<PrivateRoute><KubeConsolePage /></PrivateRoute>} />
-            <Route path="/logs" element={<PrivateRoute><LogsPage /></PrivateRoute>} />
           </Routes>
         </BrowserRouter>
         {/* Toast provider from shadcn/ui */}
