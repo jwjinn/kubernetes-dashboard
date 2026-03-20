@@ -286,6 +286,77 @@ type StreamHandlers = {
     onDone?: () => void;
 };
 
+const thinkOpenTag = '<think>';
+const thinkCloseTag = '</think>';
+
+const longestSuffixPrefixLength = (value: string, target: string) => {
+    const max = Math.min(value.length, target.length-1);
+    for (let length = max; length > 0; length -= 1) {
+        if (value.slice(-length).toLowerCase() === target.slice(0, length)) {
+            return length;
+        }
+    }
+    return 0;
+};
+
+const createThinkFilter = (onToken?: (token: string) => void) => {
+    let buffer = '';
+    let inThink = false;
+
+    const emit = (value: string) => {
+        if (value) {
+            onToken?.(value);
+        }
+    };
+
+    const push = (chunk: string) => {
+        if (!chunk) {
+            return;
+        }
+
+        buffer += chunk;
+
+        while (buffer) {
+            const lowerBuffer = buffer.toLowerCase();
+
+            if (inThink) {
+                const closeIndex = lowerBuffer.indexOf(thinkCloseTag);
+                if (closeIndex === -1) {
+                    const keepLength = longestSuffixPrefixLength(buffer, thinkCloseTag);
+                    buffer = buffer.slice(-keepLength);
+                    return;
+                }
+
+                buffer = buffer.slice(closeIndex + thinkCloseTag.length);
+                inThink = false;
+                continue;
+            }
+
+            const openIndex = lowerBuffer.indexOf(thinkOpenTag);
+            if (openIndex === -1) {
+                const keepLength = longestSuffixPrefixLength(buffer, thinkOpenTag);
+                emit(buffer.slice(0, buffer.length - keepLength));
+                buffer = buffer.slice(-keepLength);
+                return;
+            }
+
+            emit(buffer.slice(0, openIndex));
+            buffer = buffer.slice(openIndex + thinkOpenTag.length);
+            inThink = true;
+        }
+    };
+
+    const flush = () => {
+        if (!inThink && buffer) {
+            emit(buffer);
+        }
+        buffer = '';
+        inThink = false;
+    };
+
+    return { push, flush };
+};
+
 const normalizeNodeStatus = (value: string): DiagnosisNodeStatus | string => {
     const lower = value.toLowerCase();
     if (lower === 'running' || lower === 'success' || lower === 'error' || lower === 'idle') {
@@ -378,6 +449,13 @@ export const streamDiagnosisChat = async (
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const thinkFilter = createThinkFilter(handlers.onToken);
+    const filteredHandlers: StreamHandlers = {
+        ...handlers,
+        onToken: (token) => {
+            thinkFilter.push(token);
+        },
+    };
 
     while (true) {
         const { done, value } = await reader.read();
@@ -391,12 +469,13 @@ export const streamDiagnosisChat = async (
         buffer = segments.pop() ?? '';
 
         for (const segment of segments) {
-            processStreamLine(segment, handlers);
+            processStreamLine(segment, filteredHandlers);
         }
     }
 
     const tail = buffer.trim();
     if (tail) {
-        processStreamLine(tail, handlers);
+        processStreamLine(tail, filteredHandlers);
     }
+    thinkFilter.flush();
 };
