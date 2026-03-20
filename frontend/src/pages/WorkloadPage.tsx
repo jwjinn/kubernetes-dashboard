@@ -50,6 +50,25 @@ const diagnosisNodes = [
     'end',
 ] as const;
 
+const buildIdleNodeStatusMap = (): NodeStatusMap => ({
+    start: 'idle',
+    router: 'idle',
+    simple_agent: 'idle',
+    orchestrator: 'idle',
+    worker_k8s: 'idle',
+    worker_metric: 'idle',
+    worker_log: 'idle',
+    synthesizer: 'idle',
+    agent: 'idle',
+    end: 'idle',
+});
+
+const buildInitialStreamingNodeStatusMap = (): NodeStatusMap => ({
+    ...buildIdleNodeStatusMap(),
+    start: 'success',
+    router: 'running',
+});
+
 function getNodeLabel(nodeId: string) {
     switch (nodeId) {
         case 'start':
@@ -200,7 +219,7 @@ export default function WorkloadPage() {
     const [input, setInput] = useState('');
     const [isStreaming, setIsStreaming] = useState(false);
     const [progressMessages, setProgressMessages] = useState<ProgressMessage[]>([]);
-    const [nodeStatusMap, setNodeStatusMap] = useState<NodeStatusMap>({});
+    const [nodeStatusMap, setNodeStatusMap] = useState<NodeStatusMap>(buildIdleNodeStatusMap);
     const [messages, setMessages] = useState<ChatMessage[]>([
         {
             id: buildMessageId(),
@@ -283,18 +302,7 @@ export default function WorkloadPage() {
                 createdAt: Date.now(),
             },
         ]);
-        setNodeStatusMap({
-            start: 'running',
-            router: 'idle',
-            simple_agent: 'idle',
-            orchestrator: 'idle',
-            worker_k8s: 'idle',
-            worker_metric: 'idle',
-            worker_log: 'idle',
-            synthesizer: 'idle',
-            agent: 'idle',
-            end: 'idle',
-        });
+        setNodeStatusMap(buildInitialStreamingNodeStatusMap());
         setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
         setInput('');
         setIsStreaming(true);
@@ -419,6 +427,79 @@ export default function WorkloadPage() {
                             </div>
                         </div>
 
+                        <div className="border-b border-border px-5 py-4">
+                            <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <div className="text-sm font-semibold text-foreground">스트림 안내</div>
+                                        <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                            `0:`은 답변 본문, `8:`은 노드 상태, `d:`는 종료 신호입니다. `simple path`에서는 일부 노드가 `idle`로 끝나도 정상입니다.
+                                        </div>
+                                    </div>
+                                    <Badge variant="outline" className="w-fit">
+                                        {isStreaming ? '스트리밍 수신 중' : '대기 중'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="mt-4 rounded-2xl border border-border bg-muted/20 p-4">
+                                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                                    <LoaderCircle className={cn('h-4 w-4', isStreaming && 'animate-spin')} />
+                                    진행 상황
+                                </div>
+                                <div className="space-y-2">
+                                    {progressMessages.length === 0 && (
+                                        <div className="rounded-xl border border-dashed border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                                            아직 스트리밍 진단을 시작하지 않았습니다.
+                                        </div>
+                                    )}
+                                    {progressMessages.map((progress, index) => (
+                                        <div
+                                            key={progress.id}
+                                            className={cn(
+                                                'rounded-xl border px-3 py-2 text-sm',
+                                                index === progressMessages.length - 1
+                                                    ? 'border-primary/40 bg-primary/5'
+                                                    : 'border-border bg-background/70',
+                                            )}
+                                        >
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="font-medium text-foreground">{progress.label}</span>
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    {formatClockTime(progress.createdAt)}
+                                                </span>
+                                            </div>
+                                            {progress.detail && (
+                                                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                                    {progress.detail}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {isStreaming && (
+                                        <div className="text-xs text-muted-foreground">
+                                            진행 이벤트와 응답 토큰을 순차적으로 수신 중입니다.
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                                    {diagnosisNodes.map((nodeId) => (
+                                        <div
+                                            key={nodeId}
+                                            className={cn(
+                                                'rounded-xl border px-3 py-2 text-xs',
+                                                nodeStatusClass(nodeStatusMap[nodeId]),
+                                            )}
+                                        >
+                                            <div className="font-medium">{getNodeLabel(nodeId)}</div>
+                                            <div className="mt-1 text-[11px] uppercase tracking-wide opacity-80">
+                                                {nodeStatusMap[nodeId] || 'idle'}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
                         <ScrollArea className="min-h-0 flex-1">
                             <div
                                 ref={(node) => {
@@ -426,61 +507,6 @@ export default function WorkloadPage() {
                                 }}
                                 className="space-y-4 p-5"
                             >
-                                {(progressMessages.length > 0 || isStreaming) && (
-                                    <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                                        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                                            <LoaderCircle className={cn('h-4 w-4', isStreaming && 'animate-spin')} />
-                                            진행 상황
-                                        </div>
-                                        <div className="space-y-2">
-                                            {progressMessages.map((progress, index) => (
-                                                <div
-                                                    key={progress.id}
-                                                    className={cn(
-                                                        'rounded-xl border px-3 py-2 text-sm',
-                                                        index === progressMessages.length - 1
-                                                            ? 'border-primary/40 bg-primary/5'
-                                                            : 'border-border bg-background/70',
-                                                    )}
-                                                >
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <span className="font-medium text-foreground">{progress.label}</span>
-                                                        <span className="text-[11px] text-muted-foreground">
-                                                            {formatClockTime(progress.createdAt)}
-                                                        </span>
-                                                    </div>
-                                                    {progress.detail && (
-                                                        <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                                                            {progress.detail}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                            {isStreaming && (
-                                                <div className="text-xs text-muted-foreground">
-                                                    진행 이벤트와 응답 토큰을 순차적으로 수신 중입니다.
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                                            {diagnosisNodes.map((nodeId) => (
-                                                <div
-                                                    key={nodeId}
-                                                    className={cn(
-                                                        'rounded-xl border px-3 py-2 text-xs',
-                                                        nodeStatusClass(nodeStatusMap[nodeId]),
-                                                    )}
-                                                >
-                                                    <div className="font-medium">{getNodeLabel(nodeId)}</div>
-                                                    <div className="mt-1 text-[11px] uppercase tracking-wide opacity-80">
-                                                        {nodeStatusMap[nodeId] || 'idle'}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
                                 {messages.map((message) => (
                                     <div
                                         key={message.id}
