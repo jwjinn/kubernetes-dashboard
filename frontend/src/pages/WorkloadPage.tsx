@@ -223,6 +223,7 @@ export default function WorkloadPage() {
             createdAt: Date.now(),
         },
     ]);
+    const [streamingStartedAt, setStreamingStartedAt] = useState<number | null>(null);
     const scrollViewportRef = useRef<HTMLDivElement | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -279,6 +280,7 @@ export default function WorkloadPage() {
         setNodeStatusMap(buildInitialStreamingNodeStatusMap());
         setNodeErrorMap({});
         setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
+        setStreamingStartedAt(Date.now());
         setInput('');
         setIsStreaming(true);
 
@@ -319,6 +321,7 @@ export default function WorkloadPage() {
             }));
         } finally {
             setIsStreaming(false);
+            setStreamingStartedAt(null);
             abortControllerRef.current = null;
         }
     };
@@ -463,6 +466,7 @@ export default function WorkloadPage() {
                                         <div className="max-w-[85%] rounded-2xl border border-border bg-muted/30 px-4 py-3 text-foreground shadow-sm">
                                             <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold opacity-80">
                                                 AI Agent
+                                                {streamingStartedAt && <span>{formatClockTime(streamingStartedAt)}</span>}
                                             </div>
                                             <div className="text-sm text-muted-foreground">
                                                 응답을 스트리밍으로 받아오는 중입니다...
