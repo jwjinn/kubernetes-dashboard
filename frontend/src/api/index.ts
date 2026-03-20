@@ -243,3 +243,18 @@ export const fetchPodLogs = async (namespace: string, podName: string, level?: s
     if (!response.ok) throw new Error('Failed to fetch pod logs');
     return response.json();
 };
+
+export interface DiagnosisChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+export const sendDiagnosisChat = async (message: string, history: DiagnosisChatMessage[] = []) => {
+    const response = await apiFetch('/api/diagnosis/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, history }),
+    });
+    if (!response.ok) throw new Error('Failed to send diagnosis request');
+    return response.json() as Promise<{ reply: string }>;
+};

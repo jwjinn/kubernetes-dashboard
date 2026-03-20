@@ -31,6 +31,7 @@ type app struct {
 	clusterCache               *clusterCache
 	responseCache              *ttlCache
 	observability              *observabilityClient
+	mcpAgentBaseURL            string
 	nodeMetricsJob             string
 	nodeCluster                string
 	nodeMetricsMappingStrategy string
@@ -94,6 +95,7 @@ func main() {
 		allowedOrigin:              envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
 		responseCache:              newTTLCache(),
 		observability:              newObservabilityClient(),
+		mcpAgentBaseURL:            strings.TrimRight(envOrDefault("MCP_AGENT_BASE_URL", "http://mcp-agent-npu.mcp.svc.cluster.local"), "/"),
 		nodeMetricsJob:             envOrDefault("NODE_METRICS_JOB", "node-exporter"),
 		nodeCluster:                strings.TrimSpace(os.Getenv("NODE_METRICS_CLUSTER")),
 		nodeMetricsMappingStrategy: envOrDefault("NODE_METRICS_MAPPING_STRATEGY", "auto"),
@@ -133,6 +135,7 @@ func main() {
 	mux.HandleFunc("/api/k8s/events", application.handleK8sEvents)
 	mux.HandleFunc("/api/k8s/pod-describe", application.handlePodDescribe)
 	mux.HandleFunc("/api/k8s/pod-logs", application.handlePodLogs)
+	mux.HandleFunc("/api/diagnosis/chat", application.handleDiagnosisChat)
 	mux.HandleFunc("/api/k8s/node-metrics", application.handleNodeMetrics)
 	mux.HandleFunc("/api/k8s/metrics/", application.handleK8sMetrics)
 	mux.HandleFunc("/api/gpu/devices", application.handleGPUDevices)
