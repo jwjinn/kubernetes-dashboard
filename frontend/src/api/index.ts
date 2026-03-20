@@ -261,18 +261,13 @@ export interface DiagnosisChatMessage {
     content: string;
 }
 
-export interface DiagnosisStreamProgress {
-    label: string;
-    detail?: string;
-    stage?: string;
-}
-
 export type DiagnosisNodeStatus = 'idle' | 'running' | 'success' | 'error';
 
 export interface DiagnosisNodeEvent {
     nodeId: string;
     nodeType?: string;
     status: DiagnosisNodeStatus | string;
+    error?: string;
 }
 
 export const sendDiagnosisChat = async (message: string, history: DiagnosisChatMessage[] = []) => {
@@ -286,27 +281,9 @@ export const sendDiagnosisChat = async (message: string, history: DiagnosisChatM
 };
 
 type StreamHandlers = {
-    onProgress?: (progress: DiagnosisStreamProgress) => void;
     onNodeStatus?: (event: DiagnosisNodeEvent) => void;
     onToken?: (token: string) => void;
     onDone?: () => void;
-};
-
-const normalizeStageLabel = (value: string) => {
-    const lower = value.toLowerCase();
-    if (lower === 'start') return '시작';
-    if (lower.includes('router')) return '요청 라우팅';
-    if (lower.includes('simple_agent')) return '단일 응답 생성';
-    if (lower.includes('orchestrator')) return '분석 오케스트레이션';
-    if (lower.includes('worker_k8s')) return 'Kubernetes 분석';
-    if (lower.includes('worker_metric')) return '메트릭 분석';
-    if (lower.includes('worker_log')) return '로그 분석';
-    if (lower.includes('worker')) return '전문 분석 실행';
-    if (lower.includes('synthesizer')) return '응답 종합';
-    if (lower === 'agent') return '에이전트';
-    if (lower === 'end') return '종료';
-    if (lower.includes('done') || lower.includes('complete')) return '응답 완료';
-    return value;
 };
 
 const normalizeNodeStatus = (value: string): DiagnosisNodeStatus | string => {
@@ -315,22 +292,6 @@ const normalizeNodeStatus = (value: string): DiagnosisNodeStatus | string => {
         return lower;
     }
     return value;
-};
-
-const buildProgressFromNode = (event: DiagnosisNodeEvent): DiagnosisStreamProgress => {
-    const statusText = event.status === 'running'
-        ? '진행 중'
-        : event.status === 'success'
-            ? '완료'
-            : event.status === 'error'
-                ? '실패'
-                : '대기';
-
-    return {
-        label: normalizeStageLabel(event.nodeId),
-        detail: `${statusText}${event.nodeType ? ` · ${event.nodeType}` : ''}`,
-        stage: event.nodeId,
-    };
 };
 
 const processStreamLine = (rawLine: string, handlers: StreamHandlers) => {
@@ -346,11 +307,14 @@ const processStreamLine = (rawLine: string, handlers: StreamHandlers) => {
     if (line.startsWith('0:')) {
         try {
             const text = JSON.parse(line.slice(2));
-            if (typeof text === 'string' && text) {
+            if (typeof text === 'string' && text && !text.trimStart().startsWith('[과정]')) {
                 handlers.onToken?.(text);
             }
         } catch {
-            handlers.onToken?.(line.slice(2));
+            const token = line.slice(2);
+            if (!token.trimStart().startsWith('[과정]')) {
+                handlers.onToken?.(token);
+            }
         }
         return;
     }
@@ -368,9 +332,9 @@ const processStreamLine = (rawLine: string, handlers: StreamHandlers) => {
                         nodeId,
                         nodeType: typeof data?.nodeType === 'string' ? data.nodeType : undefined,
                         status,
+                        error: typeof data?.error === 'string' ? data.error : undefined,
                     };
                     handlers.onNodeStatus?.(nodeEvent);
-                    handlers.onProgress?.(buildProgressFromNode(nodeEvent));
                 }
             }
         } catch {

@@ -5,7 +5,6 @@ import {
     type DiagnosisChatMessage,
     type DiagnosisNodeEvent,
     type DiagnosisNodeStatus,
-    type DiagnosisStreamProgress,
 } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,12 +19,8 @@ type ChatMessage = DiagnosisChatMessage & {
     createdAt: number;
 };
 
-type ProgressMessage = DiagnosisStreamProgress & {
-    id: string;
-    createdAt: number;
-};
-
 type NodeStatusMap = Record<string, DiagnosisNodeStatus | string>;
+type NodeErrorMap = Record<string, string | undefined>;
 
 const starterPrompts = [
     '현재 NPU inference 환경 전반 상태를 진단해줘',
@@ -218,8 +213,8 @@ function MarkdownMessage({ content }: { content: string }) {
 export default function WorkloadPage() {
     const [input, setInput] = useState('');
     const [isStreaming, setIsStreaming] = useState(false);
-    const [progressMessages, setProgressMessages] = useState<ProgressMessage[]>([]);
     const [nodeStatusMap, setNodeStatusMap] = useState<NodeStatusMap>(buildIdleNodeStatusMap);
+    const [nodeErrorMap, setNodeErrorMap] = useState<NodeErrorMap>({});
     const [messages, setMessages] = useState<ChatMessage[]>([
         {
             id: buildMessageId(),
@@ -234,33 +229,20 @@ export default function WorkloadPage() {
     useEffect(() => {
         if (!scrollViewportRef.current) return;
         scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight;
-    }, [messages, progressMessages, isStreaming]);
+    }, [messages, isStreaming]);
 
     useEffect(() => () => {
         abortControllerRef.current?.abort();
     }, []);
 
-    const appendProgress = (progress: DiagnosisStreamProgress) => {
-        setProgressMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last && last.label === progress.label && last.detail === progress.detail) {
-                return prev;
-            }
-            return [
-                ...prev,
-                {
-                    id: buildMessageId(),
-                    createdAt: Date.now(),
-                    ...progress,
-                },
-            ];
-        });
-    };
-
     const updateNodeStatus = (event: DiagnosisNodeEvent) => {
         setNodeStatusMap((prev) => ({
             ...prev,
             [event.nodeId]: event.status,
+        }));
+        setNodeErrorMap((prev) => ({
+            ...prev,
+            [event.nodeId]: event.error,
         }));
     };
 
@@ -294,37 +276,21 @@ export default function WorkloadPage() {
             createdAt: Date.now(),
         };
 
-        setProgressMessages([
-            {
-                id: buildMessageId(),
-                label: '요청 전송',
-                detail: 'MCP AI Agent에 스트리밍 진단을 요청했습니다.',
-                createdAt: Date.now(),
-            },
-        ]);
         setNodeStatusMap(buildInitialStreamingNodeStatusMap());
+        setNodeErrorMap({});
         setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
         setInput('');
         setIsStreaming(true);
 
         try {
             await streamDiagnosisChat(message, {
-                onProgress: (progress) => {
-                    appendProgress(progress);
-                },
                 onNodeStatus: (event) => {
                     updateNodeStatus(event);
                 },
                 onToken: (token) => {
                     updateAssistantMessage(assistantId, (content) => `${content}${token}`);
                 },
-                onDone: () => {
-                    appendProgress({
-                        label: '응답 완료',
-                        detail: '스트리밍 응답 수신이 완료되었습니다.',
-                        stage: 'done',
-                    });
-                },
+                onDone: () => {},
             }, controller.signal);
 
             setMessages((prev) => prev.map((entry) => (
@@ -341,11 +307,16 @@ export default function WorkloadPage() {
                     ? `${content}\n\n요청 처리 중 문제가 발생했습니다.\n${errorMessage}`
                     : `요청 처리 중 문제가 발생했습니다.\n\n${errorMessage}`
             ));
-            appendProgress({
-                label: '요청 실패',
-                detail: errorMessage,
-                stage: 'error',
-            });
+            setNodeStatusMap((prev) => ({
+                ...prev,
+                agent: 'error',
+                end: 'error',
+            }));
+            setNodeErrorMap((prev) => ({
+                ...prev,
+                agent: errorMessage,
+                end: errorMessage,
+            }));
         } finally {
             setIsStreaming(false);
             abortControllerRef.current = null;
@@ -431,41 +402,6 @@ export default function WorkloadPage() {
                                 ))}
                             </div>
                             <div className="mt-4 rounded-2xl border border-border bg-muted/20 p-4">
-                                <div className="space-y-2">
-                                    {progressMessages.length === 0 && (
-                                        <div className="rounded-xl border border-dashed border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                                            아직 스트리밍 진단을 시작하지 않았습니다.
-                                        </div>
-                                    )}
-                                    {progressMessages.map((progress, index) => (
-                                        <div
-                                            key={progress.id}
-                                            className={cn(
-                                                'rounded-xl border px-3 py-2 text-sm',
-                                                index === progressMessages.length - 1
-                                                    ? 'border-primary/40 bg-primary/5'
-                                                    : 'border-border bg-background/70',
-                                            )}
-                                        >
-                                            <div className="flex items-center justify-between gap-3">
-                                                <span className="font-medium text-foreground">{progress.label}</span>
-                                                <span className="text-[11px] text-muted-foreground">
-                                                    {formatClockTime(progress.createdAt)}
-                                                </span>
-                                            </div>
-                                            {progress.detail && (
-                                                <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                                                    {progress.detail}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                    {isStreaming && (
-                                        <div className="text-xs text-muted-foreground">
-                                            진행 이벤트와 응답 토큰을 순차적으로 수신 중입니다.
-                                        </div>
-                                    )}
-                                </div>
                                 <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                                     {diagnosisNodes.map((nodeId) => (
                                         <div
@@ -479,6 +415,11 @@ export default function WorkloadPage() {
                                             <div className="mt-1 text-[11px] uppercase tracking-wide opacity-80">
                                                 {nodeStatusMap[nodeId] || 'idle'}
                                             </div>
+                                            {nodeErrorMap[nodeId] && (
+                                                <div className="mt-1 line-clamp-2 text-[11px] normal-case tracking-normal opacity-80">
+                                                    {nodeErrorMap[nodeId]}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
