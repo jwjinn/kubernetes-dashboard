@@ -15,6 +15,7 @@ data:
   SUMMARY_CACHE_TTL: "10s"
   TOPOLOGY_CACHE_TTL: "15s"
   MCP_AGENT_BASE_URL: "http://mcp-agent-npu.mcp.svc.cluster.local"
+  DIAGNOSIS_CHAT_TIMEOUT: "240s"
   LOGS_BASE_URL: "http://victoria-logs-single-server.observability.svc.cluster.local:9428"
   TRACES_BASE_URL: "http://victoria-traces-vtc-vtselect.observability.svc.cluster.local:10471"
   METRICS_BASE_URL: "http://vmselect-vm.observability.svc.cluster.local:8481"

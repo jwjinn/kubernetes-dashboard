@@ -20,6 +20,18 @@ const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     return response;
 };
 
+const readErrorMessage = async (response: Response, fallbackMessage: string) => {
+    try {
+        const data = await response.json() as { error?: string };
+        if (data?.error) {
+            return data.error;
+        }
+    } catch {
+        // Ignore parse failures and use fallback below.
+    }
+    return fallbackMessage;
+};
+
 export const fetchClusterSummary = async (clusterId: string) => {
     const response = await apiFetch(`/api/clusters/summary?cluster=${clusterId}`);
     if (!response.ok) throw new Error('Failed to fetch cluster summary');
@@ -255,6 +267,6 @@ export const sendDiagnosisChat = async (message: string, history: DiagnosisChatM
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, history }),
     });
-    if (!response.ok) throw new Error('Failed to send diagnosis request');
+    if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to send diagnosis request'));
     return response.json() as Promise<{ reply: string }>;
 };

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,7 +67,12 @@ func (a *app) proxyDiagnosisChat(ctx context.Context, req diagnosisChatRequest) 
 		return "", fmt.Errorf("failed to marshal diagnosis request: %w", err)
 	}
 
-	requestCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	timeout := a.diagnosisChatTimeout
+	if timeout <= 0 {
+		timeout = 240 * time.Second
+	}
+
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	httpReq, err := http.NewRequestWithContext(requestCtx, http.MethodPost, a.mcpAgentBaseURL+"/api/chat", bytes.NewReader(body))
@@ -75,9 +81,12 @@ func (a *app) proxyDiagnosisChat(ctx context.Context, req diagnosisChatRequest) 
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 95 * time.Second}
+	client := &http.Client{Timeout: timeout + 5*time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
+			return "", fmt.Errorf("mcp agent response timed out after %s", timeout)
+		}
 		return "", fmt.Errorf("failed to reach mcp agent: %w", err)
 	}
 	defer resp.Body.Close()

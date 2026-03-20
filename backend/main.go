@@ -32,6 +32,7 @@ type app struct {
 	responseCache              *ttlCache
 	observability              *observabilityClient
 	mcpAgentBaseURL            string
+	diagnosisChatTimeout       time.Duration
 	nodeMetricsJob             string
 	nodeCluster                string
 	nodeMetricsMappingStrategy string
@@ -96,6 +97,7 @@ func main() {
 		responseCache:              newTTLCache(),
 		observability:              newObservabilityClient(),
 		mcpAgentBaseURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("MCP_AGENT_BASE_URL")), "/"),
+		diagnosisChatTimeout:       durationEnvOrDefault("DIAGNOSIS_CHAT_TIMEOUT", 240*time.Second),
 		nodeMetricsJob:             envOrDefault("NODE_METRICS_JOB", "node-exporter"),
 		nodeCluster:                strings.TrimSpace(os.Getenv("NODE_METRICS_CLUSTER")),
 		nodeMetricsMappingStrategy: envOrDefault("NODE_METRICS_MAPPING_STRATEGY", "auto"),
@@ -154,6 +156,7 @@ func main() {
 	log.Printf("backend listening on http://localhost:%s", port)
 	log.Printf("kubernetes auth enabled: %t", application.authEnabled)
 	log.Printf("mcp agent base URL configured: %t", application.mcpAgentBaseURL != "")
+	log.Printf("diagnosis chat timeout: %s", application.diagnosisChatTimeout)
 	log.Printf("informer cache resync interval: %s", cacheResync)
 	log.Printf(
 		"node metrics mapping: strategy=%s job=%s cluster=%q podNamespace=%q podNameRegex=%q podInfoMetric=%s",
