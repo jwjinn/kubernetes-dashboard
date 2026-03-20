@@ -409,10 +409,15 @@ export default function WorkloadPage() {
 
                     <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm">
                         <div className="border-b border-border px-5 py-4">
-                            <p className="text-sm font-bold text-foreground">대화형 장애 진단</p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                자연어로 질문하면 AI Agent가 인프라 상태를 진단하고 원인 및 조치 방향을 정리합니다.
-                            </p>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                    <LoaderCircle className={cn('h-4 w-4', isStreaming && 'animate-spin')} />
+                                    진행 상황
+                                </div>
+                                <Badge variant="outline" className="w-fit">
+                                    {isStreaming ? '스트리밍 수신 중' : '대기 중'}
+                                </Badge>
+                            </div>
                             <div className="mt-3 flex flex-wrap gap-2 xl:hidden">
                                 {starterPrompts.map((prompt) => (
                                     <button
@@ -425,27 +430,7 @@ export default function WorkloadPage() {
                                     </button>
                                 ))}
                             </div>
-                        </div>
-
-                        <div className="border-b border-border px-5 py-4">
-                            <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                                    <div>
-                                        <div className="text-sm font-semibold text-foreground">스트림 안내</div>
-                                        <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                                            `0:`은 답변 본문, `8:`은 노드 상태, `d:`는 종료 신호입니다. `simple path`에서는 일부 노드가 `idle`로 끝나도 정상입니다.
-                                        </div>
-                                    </div>
-                                    <Badge variant="outline" className="w-fit">
-                                        {isStreaming ? '스트리밍 수신 중' : '대기 중'}
-                                    </Badge>
-                                </div>
-                            </div>
                             <div className="mt-4 rounded-2xl border border-border bg-muted/20 p-4">
-                                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                                    <LoaderCircle className={cn('h-4 w-4', isStreaming && 'animate-spin')} />
-                                    진행 상황
-                                </div>
                                 <div className="space-y-2">
                                     {progressMessages.length === 0 && (
                                         <div className="rounded-xl border border-dashed border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground">
