@@ -58,7 +58,7 @@ func (a *app) proxyDiagnosisChat(ctx context.Context, req diagnosisChatRequest) 
 	}
 
 	payload := map[string]string{
-		"message": buildDiagnosisPrompt(req.History, req.Message),
+		"message": req.Message,
 	}
 
 	body, err := json.Marshal(payload)
@@ -99,34 +99,4 @@ func (a *app) proxyDiagnosisChat(ctx context.Context, req diagnosisChatRequest) 
 	}
 
 	return payloadResp.Reply, nil
-}
-
-func buildDiagnosisPrompt(history []diagnosisChatMessage, latest string) string {
-	if len(history) == 0 {
-		return latest
-	}
-
-	var b strings.Builder
-	b.WriteString("이전 대화 문맥:\n")
-	for _, message := range history {
-		role := strings.TrimSpace(message.Role)
-		content := strings.TrimSpace(message.Content)
-		if content == "" {
-			continue
-		}
-
-		switch role {
-		case "assistant":
-			b.WriteString("Assistant: ")
-		case "user":
-			b.WriteString("User: ")
-		default:
-			b.WriteString("Message: ")
-		}
-		b.WriteString(content)
-		b.WriteString("\n")
-	}
-	b.WriteString("\n현재 사용자 요청:\n")
-	b.WriteString(strings.TrimSpace(latest))
-	return b.String()
 }

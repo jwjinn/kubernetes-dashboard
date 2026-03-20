@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import { sendDiagnosisChat, type DiagnosisChatMessage } from '@/api';
@@ -35,11 +35,6 @@ export default function WorkloadPage() {
         },
     ]);
     const scrollViewportRef = useRef<HTMLDivElement | null>(null);
-
-    const history = useMemo(
-        () => messages.filter((message) => message.role === 'user' || message.role === 'assistant').map(({ role, content }) => ({ role, content })),
-        [messages],
-    );
 
     const diagnosisMutation = useMutation({
         mutationFn: async (payload: { message: string; history: DiagnosisChatMessage[] }) => {
@@ -93,7 +88,7 @@ export default function WorkloadPage() {
         setInput('');
         diagnosisMutation.mutate({
             message,
-            history: [...history, { role: 'user', content: message }],
+            history: [],
         });
     };
 
