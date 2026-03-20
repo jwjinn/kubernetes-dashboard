@@ -28,6 +28,8 @@ const starterPrompts = [
     'VictoriaLogs와 Kubernetes 이벤트를 기준으로 위험 신호를 찾아줘',
 ];
 
+const streamingPlaceholderText = '응답을 스트리밍으로 받아오는 중입니다...';
+
 function buildMessageId() {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -273,7 +275,7 @@ export default function WorkloadPage() {
         const assistantPlaceholder: ChatMessage = {
             id: assistantId,
             role: 'assistant',
-            content: '',
+            content: streamingPlaceholderText,
             createdAt: Date.now(),
         };
 
@@ -290,7 +292,9 @@ export default function WorkloadPage() {
                     updateNodeStatus(event);
                 },
                 onToken: (token) => {
-                    updateAssistantMessage(assistantId, (content) => `${content}${token}`);
+                    updateAssistantMessage(assistantId, (content) => (
+                        content === streamingPlaceholderText ? token : `${content}${token}`
+                    ));
                 },
                 onDone: () => {},
             }, controller.signal);
@@ -437,9 +441,6 @@ export default function WorkloadPage() {
                                 className="space-y-4 p-5"
                             >
                                 {messages.map((message) => (
-                                    message.role === 'assistant' && !message.content.trim()
-                                        ? null
-                                        : (
                                     <div
                                         key={message.id}
                                         className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -462,22 +463,7 @@ export default function WorkloadPage() {
                                                 )}
                                         </div>
                                     </div>
-                                        )
                                 ))}
-
-                                {isStreaming && (
-                                    <div className="flex justify-start">
-                                        <div className="max-w-[85%] rounded-2xl border border-border bg-muted/30 px-4 py-3 text-foreground shadow-sm">
-                                            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold opacity-80">
-                                                AI Agent
-                                                {streamingStartedAt && <span>{formatClockTime(streamingStartedAt)}</span>}
-                                            </div>
-                                            <div className="text-sm text-muted-foreground">
-                                                응답을 스트리밍으로 받아오는 중입니다...
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </ScrollArea>
 
