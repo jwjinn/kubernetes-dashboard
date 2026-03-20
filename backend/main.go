@@ -138,6 +138,7 @@ func main() {
 	mux.HandleFunc("/api/k8s/pod-describe", application.handlePodDescribe)
 	mux.HandleFunc("/api/k8s/pod-logs", application.handlePodLogs)
 	mux.HandleFunc("/api/diagnosis/chat", application.handleDiagnosisChat)
+	mux.HandleFunc("/api/diagnosis/chat/stream", application.handleDiagnosisChatStream)
 	mux.HandleFunc("/api/k8s/node-metrics", application.handleNodeMetrics)
 	mux.HandleFunc("/api/k8s/metrics/", application.handleK8sMetrics)
 	mux.HandleFunc("/api/gpu/devices", application.handleGPUDevices)

@@ -1,15 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
-import { sendDiagnosisChat, type DiagnosisChatMessage } from '@/api';
+import { streamDiagnosisChat, type DiagnosisChatMessage, type DiagnosisStreamProgress } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, Send, ShieldAlert, Sparkles } from 'lucide-react';
+import { Bot, LoaderCircle, Send, ShieldAlert, Sparkles } from 'lucide-react';
 import { formatClockTime } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 type ChatMessage = DiagnosisChatMessage & {
+    id: string;
+    createdAt: number;
+};
+
+type ProgressMessage = DiagnosisStreamProgress & {
     id: string;
     createdAt: number;
 };
@@ -132,6 +137,8 @@ function MarkdownMessage({ content }: { content: string }) {
 
 export default function WorkloadPage() {
     const [input, setInput] = useState('');
+    const [isStreaming, setIsStreaming] = useState(false);
+    const [progressMessages, setProgressMessages] = useState<ProgressMessage[]>([]);
     const [messages, setMessages] = useState<ChatMessage[]>([
         {
             id: buildMessageId(),
@@ -141,61 +148,116 @@ export default function WorkloadPage() {
         },
     ]);
     const scrollViewportRef = useRef<HTMLDivElement | null>(null);
-
-    const diagnosisMutation = useMutation({
-        mutationFn: async (payload: { message: string; history: DiagnosisChatMessage[] }) => {
-            return sendDiagnosisChat(payload.message, payload.history);
-        },
-        onSuccess: (data) => {
-            setMessages((prev) => [
-                ...prev,
-                {
-                    id: buildMessageId(),
-                    role: 'assistant',
-                    content: data.reply,
-                    createdAt: Date.now(),
-                },
-            ]);
-        },
-        onError: (error) => {
-            const message = error instanceof Error
-                ? error.message
-                : 'AI 진단 요청에 실패했습니다. MCP agent 연결 상태를 확인해주세요.';
-            setMessages((prev) => [
-                ...prev,
-                {
-                    id: buildMessageId(),
-                    role: 'assistant',
-                    content: `요청 처리 중 문제가 발생했습니다.\n\n${message}`,
-                    createdAt: Date.now(),
-                },
-            ]);
-        },
-    });
+    const abortControllerRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         if (!scrollViewportRef.current) return;
         scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight;
-    }, [messages, diagnosisMutation.isPending]);
+    }, [messages, progressMessages, isStreaming]);
 
-    const submitMessage = (rawMessage: string) => {
+    useEffect(() => () => {
+        abortControllerRef.current?.abort();
+    }, []);
+
+    const appendProgress = (progress: DiagnosisStreamProgress) => {
+        setProgressMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.label === progress.label && last.detail === progress.detail) {
+                return prev;
+            }
+            return [
+                ...prev,
+                {
+                    id: buildMessageId(),
+                    createdAt: Date.now(),
+                    ...progress,
+                },
+            ];
+        });
+    };
+
+    const updateAssistantMessage = (assistantId: string, updater: (content: string) => string) => {
+        setMessages((prev) => prev.map((message) => (
+            message.id === assistantId
+                ? { ...message, content: updater(message.content) }
+                : message
+        )));
+    };
+
+    const submitMessage = async (rawMessage: string) => {
         const message = rawMessage.trim();
-        if (!message || diagnosisMutation.isPending) return;
+        if (!message || isStreaming) return;
 
-        setMessages((prev) => [
-            ...prev,
+        abortControllerRef.current?.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        const userMessage: ChatMessage = {
+            id: buildMessageId(),
+            role: 'user',
+            content: message,
+            createdAt: Date.now(),
+        };
+        const assistantId = buildMessageId();
+        const assistantPlaceholder: ChatMessage = {
+            id: assistantId,
+            role: 'assistant',
+            content: '',
+            createdAt: Date.now(),
+        };
+
+        setProgressMessages([
             {
                 id: buildMessageId(),
-                role: 'user',
-                content: message,
+                label: '요청 전송',
+                detail: 'MCP AI Agent에 스트리밍 진단을 요청했습니다.',
                 createdAt: Date.now(),
             },
         ]);
+        setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
         setInput('');
-        diagnosisMutation.mutate({
-            message,
-            history: [],
-        });
+        setIsStreaming(true);
+
+        try {
+            await streamDiagnosisChat(message, {
+                onProgress: (progress) => {
+                    appendProgress(progress);
+                },
+                onToken: (token) => {
+                    updateAssistantMessage(assistantId, (content) => `${content}${token}`);
+                },
+                onDone: () => {
+                    appendProgress({
+                        label: '응답 완료',
+                        detail: '스트리밍 응답 수신이 완료되었습니다.',
+                        stage: 'done',
+                    });
+                },
+            }, controller.signal);
+
+            setMessages((prev) => prev.map((entry) => (
+                entry.id === assistantId && !entry.content.trim()
+                    ? { ...entry, content: '응답이 비어 있습니다.' }
+                    : entry
+            )));
+        } catch (error) {
+            const errorMessage = error instanceof Error
+                ? error.message
+                : 'AI 진단 요청에 실패했습니다. MCP agent 연결 상태를 확인해주세요.';
+            updateAssistantMessage(assistantId, (content) => (
+                content.trim()
+                    ? `${content}\n\n요청 처리 중 문제가 발생했습니다.\n${errorMessage}`
+                    : `요청 처리 중 문제가 발생했습니다.\n\n${errorMessage}`
+            ));
+            appendProgress({
+                label: '요청 실패',
+                detail: errorMessage,
+                stage: 'error',
+            });
+        } finally {
+            setIsStreaming(false);
+            abortControllerRef.current = null;
+        }
     };
 
     return (
@@ -237,7 +299,7 @@ export default function WorkloadPage() {
                                 <button
                                     key={prompt}
                                     onClick={() => submitMessage(prompt)}
-                                    disabled={diagnosisMutation.isPending}
+                                    disabled={isStreaming}
                                     className="w-full rounded-lg border border-border bg-muted/30 p-3 text-left text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {prompt}
@@ -264,7 +326,7 @@ export default function WorkloadPage() {
                                     <button
                                         key={`compact-${prompt}`}
                                         onClick={() => submitMessage(prompt)}
-                                        disabled={diagnosisMutation.isPending}
+                                        disabled={isStreaming}
                                         className="rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         {prompt}
@@ -280,6 +342,45 @@ export default function WorkloadPage() {
                                 }}
                                 className="space-y-4 p-5"
                             >
+                                {(progressMessages.length > 0 || isStreaming) && (
+                                    <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                                        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                                            <LoaderCircle className={cn('h-4 w-4', isStreaming && 'animate-spin')} />
+                                            진행 상황
+                                        </div>
+                                        <div className="space-y-2">
+                                            {progressMessages.map((progress, index) => (
+                                                <div
+                                                    key={progress.id}
+                                                    className={cn(
+                                                        'rounded-xl border px-3 py-2 text-sm',
+                                                        index === progressMessages.length - 1
+                                                            ? 'border-primary/40 bg-primary/5'
+                                                            : 'border-border bg-background/70',
+                                                    )}
+                                                >
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <span className="font-medium text-foreground">{progress.label}</span>
+                                                        <span className="text-[11px] text-muted-foreground">
+                                                            {formatClockTime(progress.createdAt)}
+                                                        </span>
+                                                    </div>
+                                                    {progress.detail && (
+                                                        <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                                                            {progress.detail}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {isStreaming && (
+                                                <div className="text-xs text-muted-foreground">
+                                                    진행 이벤트와 응답 토큰을 순차적으로 수신 중입니다.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {messages.map((message) => (
                                     <div
                                         key={message.id}
@@ -305,14 +406,14 @@ export default function WorkloadPage() {
                                     </div>
                                 ))}
 
-                                {diagnosisMutation.isPending && (
+                                {isStreaming && (
                                     <div className="flex justify-start">
                                         <div className="max-w-[85%] rounded-2xl border border-border bg-muted/30 px-4 py-3 text-foreground shadow-sm">
                                             <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold opacity-80">
                                                 AI Agent
                                             </div>
                                             <div className="text-sm text-muted-foreground">
-                                                진단 요청을 처리하는 중입니다...
+                                                응답을 스트리밍으로 받아오는 중입니다...
                                             </div>
                                         </div>
                                     </div>
@@ -330,7 +431,7 @@ export default function WorkloadPage() {
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
-                                            submitMessage(input);
+                                            void submitMessage(input);
                                         }
                                     }}
                                 />
@@ -339,8 +440,8 @@ export default function WorkloadPage() {
                                         `Shift + Enter`로 줄바꿈, `Enter`로 전송
                                     </p>
                                     <Button
-                                        onClick={() => submitMessage(input)}
-                                        disabled={diagnosisMutation.isPending || !input.trim()}
+                                        onClick={() => void submitMessage(input)}
+                                        disabled={isStreaming || !input.trim()}
                                         className="gap-2"
                                     >
                                         <Send className="h-4 w-4" />

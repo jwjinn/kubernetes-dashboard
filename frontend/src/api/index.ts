@@ -261,6 +261,12 @@ export interface DiagnosisChatMessage {
     content: string;
 }
 
+export interface DiagnosisStreamProgress {
+    label: string;
+    detail?: string;
+    stage?: string;
+}
+
 export const sendDiagnosisChat = async (message: string, history: DiagnosisChatMessage[] = []) => {
     const response = await apiFetch('/api/diagnosis/chat', {
         method: 'POST',
@@ -269,4 +275,178 @@ export const sendDiagnosisChat = async (message: string, history: DiagnosisChatM
     });
     if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to send diagnosis request'));
     return response.json() as Promise<{ reply: string }>;
+};
+
+type StreamHandlers = {
+    onProgress?: (progress: DiagnosisStreamProgress) => void;
+    onToken?: (token: string) => void;
+    onDone?: () => void;
+};
+
+const firstString = (...values: unknown[]) => {
+    for (const value of values) {
+        if (typeof value === 'string' && value.trim()) {
+            return value;
+        }
+    }
+    return '';
+};
+
+const normalizeStageLabel = (value: string) => {
+    const lower = value.toLowerCase();
+    if (lower.includes('router')) return '요청 라우팅';
+    if (lower.includes('worker')) return '전문 분석 실행';
+    if (lower.includes('synthesizer')) return '응답 종합';
+    if (lower.includes('done') || lower.includes('complete')) return '응답 완료';
+    return value;
+};
+
+const extractExplicitToken = (payload: any): string => {
+    return firstString(
+        payload?.token,
+        payload?.delta,
+        payload?.reply,
+        payload?.answer,
+        payload?.choices?.[0]?.delta?.content,
+        payload?.choices?.[0]?.message?.content,
+    );
+};
+
+const extractProgress = (payload: any): DiagnosisStreamProgress | null => {
+    const explicit = payload?.progress;
+    if (typeof explicit === 'string' && explicit.trim()) {
+        return {
+            label: normalizeStageLabel(explicit.trim()),
+            detail: firstString(payload?.detail, payload?.message, payload?.status),
+            stage: explicit.trim(),
+        };
+    }
+
+    const stage = firstString(
+        payload?.stage,
+        payload?.phase,
+        payload?.worker,
+        payload?.agent,
+        payload?.source,
+        payload?.event,
+        payload?.event_type,
+        payload?.type,
+        payload?.role,
+    );
+    const detail = firstString(
+        payload?.detail,
+        payload?.status,
+        typeof payload?.message === 'string' ? payload.message : '',
+        payload?.description,
+        payload?.note,
+    );
+
+    if (!stage) {
+        return null;
+    }
+
+    return {
+        label: normalizeStageLabel(stage),
+        detail,
+        stage,
+    };
+};
+
+const processStreamPayload = (raw: string, handlers: StreamHandlers) => {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === '[DONE]') {
+        return;
+    }
+
+    let payload: any = null;
+    try {
+        payload = JSON.parse(trimmed);
+    } catch {
+        handlers.onToken?.(raw);
+        return;
+    }
+
+    const progress = extractProgress(payload);
+    if (progress) {
+        handlers.onProgress?.(progress);
+    }
+
+    const token = extractExplicitToken(payload) || (
+        progress
+            ? ''
+            : firstString(
+                payload?.content,
+                payload?.text,
+                payload?.message && typeof payload.message === 'string' ? payload.message : '',
+            )
+    );
+    if (token) {
+        handlers.onToken?.(token);
+    }
+};
+
+export const streamDiagnosisChat = async (
+    message: string,
+    handlers: StreamHandlers,
+    signal?: AbortSignal,
+) => {
+    const response = await apiFetch('/api/diagnosis/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+        signal,
+    });
+
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Failed to stream diagnosis request'));
+    }
+    if (!response.body) {
+        throw new Error('Diagnosis stream is unavailable');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const normalized = buffer.replace(/\r\n/g, '\n');
+        const segments = normalized.split('\n');
+        buffer = segments.pop() ?? '';
+
+        let sseData: string[] = [];
+        for (const segment of segments) {
+            const line = segment.trim();
+            if (!line) {
+                if (sseData.length > 0) {
+                    processStreamPayload(sseData.join('\n'), handlers);
+                    sseData = [];
+                }
+                continue;
+            }
+
+            if (line.startsWith('data:')) {
+                sseData.push(line.slice(5).trim());
+                continue;
+            }
+
+            if (line.startsWith('event:') || line.startsWith(':')) {
+                continue;
+            }
+
+            processStreamPayload(line, handlers);
+        }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+        processStreamPayload(tail.startsWith('data:') ? tail.slice(5).trim() : tail, handlers);
+    }
+
+    handlers.onDone?.();
 };
