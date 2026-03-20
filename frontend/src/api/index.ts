@@ -267,6 +267,14 @@ export interface DiagnosisStreamProgress {
     stage?: string;
 }
 
+export type DiagnosisNodeStatus = 'idle' | 'running' | 'success' | 'error';
+
+export interface DiagnosisNodeEvent {
+    nodeId: string;
+    nodeType?: string;
+    status: DiagnosisNodeStatus | string;
+}
+
 export const sendDiagnosisChat = async (message: string, history: DiagnosisChatMessage[] = []) => {
     const response = await apiFetch('/api/diagnosis/chat', {
         method: 'POST',
@@ -279,109 +287,108 @@ export const sendDiagnosisChat = async (message: string, history: DiagnosisChatM
 
 type StreamHandlers = {
     onProgress?: (progress: DiagnosisStreamProgress) => void;
+    onNodeStatus?: (event: DiagnosisNodeEvent) => void;
     onToken?: (token: string) => void;
     onDone?: () => void;
 };
 
-const firstString = (...values: unknown[]) => {
-    for (const value of values) {
-        if (typeof value === 'string' && value.trim()) {
-            return value;
-        }
-    }
-    return '';
-};
-
 const normalizeStageLabel = (value: string) => {
     const lower = value.toLowerCase();
+    if (lower === 'start') return '시작';
     if (lower.includes('router')) return '요청 라우팅';
+    if (lower.includes('simple_agent')) return '단일 응답 생성';
+    if (lower.includes('orchestrator')) return '분석 오케스트레이션';
+    if (lower.includes('worker_k8s')) return 'Kubernetes 분석';
+    if (lower.includes('worker_metric')) return '메트릭 분석';
+    if (lower.includes('worker_log')) return '로그 분석';
     if (lower.includes('worker')) return '전문 분석 실행';
     if (lower.includes('synthesizer')) return '응답 종합';
+    if (lower === 'agent') return '에이전트';
+    if (lower === 'end') return '종료';
     if (lower.includes('done') || lower.includes('complete')) return '응답 완료';
     return value;
 };
 
-const extractExplicitToken = (payload: any): string => {
-    return firstString(
-        payload?.token,
-        payload?.delta,
-        payload?.reply,
-        payload?.answer,
-        payload?.choices?.[0]?.delta?.content,
-        payload?.choices?.[0]?.message?.content,
-    );
+const normalizeNodeStatus = (value: string): DiagnosisNodeStatus | string => {
+    const lower = value.toLowerCase();
+    if (lower === 'running' || lower === 'success' || lower === 'error' || lower === 'idle') {
+        return lower;
+    }
+    return value;
 };
 
-const extractProgress = (payload: any): DiagnosisStreamProgress | null => {
-    const explicit = payload?.progress;
-    if (typeof explicit === 'string' && explicit.trim()) {
-        return {
-            label: normalizeStageLabel(explicit.trim()),
-            detail: firstString(payload?.detail, payload?.message, payload?.status),
-            stage: explicit.trim(),
-        };
-    }
-
-    const stage = firstString(
-        payload?.stage,
-        payload?.phase,
-        payload?.worker,
-        payload?.agent,
-        payload?.source,
-        payload?.event,
-        payload?.event_type,
-        payload?.type,
-        payload?.role,
-    );
-    const detail = firstString(
-        payload?.detail,
-        payload?.status,
-        typeof payload?.message === 'string' ? payload.message : '',
-        payload?.description,
-        payload?.note,
-    );
-
-    if (!stage) {
-        return null;
-    }
+const buildProgressFromNode = (event: DiagnosisNodeEvent): DiagnosisStreamProgress => {
+    const statusText = event.status === 'running'
+        ? '진행 중'
+        : event.status === 'success'
+            ? '완료'
+            : event.status === 'error'
+                ? '실패'
+                : '대기';
 
     return {
-        label: normalizeStageLabel(stage),
-        detail,
-        stage,
+        label: normalizeStageLabel(event.nodeId),
+        detail: `${statusText}${event.nodeType ? ` · ${event.nodeType}` : ''}`,
+        stage: event.nodeId,
     };
 };
 
-const processStreamPayload = (raw: string, handlers: StreamHandlers) => {
-    const trimmed = raw.trim();
-    if (!trimmed || trimmed === '[DONE]') {
+const processStreamLine = (rawLine: string, handlers: StreamHandlers) => {
+    const line = rawLine.trim();
+    if (!line || line === '[DONE]') {
         return;
     }
 
-    let payload: any = null;
-    try {
-        payload = JSON.parse(trimmed);
-    } catch {
-        handlers.onToken?.(raw);
+    if (line === '" "' || line === '"\\n"' || line === '"\n"') {
         return;
     }
 
-    const progress = extractProgress(payload);
-    if (progress) {
-        handlers.onProgress?.(progress);
+    if (line.startsWith('0:')) {
+        try {
+            const text = JSON.parse(line.slice(2));
+            if (typeof text === 'string' && text) {
+                handlers.onToken?.(text);
+            }
+        } catch {
+            handlers.onToken?.(line.slice(2));
+        }
+        return;
     }
 
-    const token = extractExplicitToken(payload) || (
-        progress
-            ? ''
-            : firstString(
-                payload?.content,
-                payload?.text,
-                payload?.message && typeof payload.message === 'string' ? payload.message : '',
-            )
-    );
-    if (token) {
-        handlers.onToken?.(token);
+    if (line.startsWith('8:')) {
+        try {
+            const events = JSON.parse(line.slice(2));
+            if (Array.isArray(events)) {
+                for (const entry of events) {
+                    const data = entry?.data;
+                    const nodeId = typeof data?.nodeId === 'string' ? data.nodeId : '';
+                    const status = typeof data?.status === 'string' ? normalizeNodeStatus(data.status) : 'idle';
+                    if (!nodeId) continue;
+                    const nodeEvent: DiagnosisNodeEvent = {
+                        nodeId,
+                        nodeType: typeof data?.nodeType === 'string' ? data.nodeType : undefined,
+                        status,
+                    };
+                    handlers.onNodeStatus?.(nodeEvent);
+                    handlers.onProgress?.(buildProgressFromNode(nodeEvent));
+                }
+            }
+        } catch {
+            // Ignore malformed node status events.
+        }
+        return;
+    }
+
+    if (line.startsWith('d:')) {
+        try {
+            const meta = JSON.parse(line.slice(2));
+            if (meta?.finishReason === 'stop') {
+                handlers.onDone?.();
+            }
+        } catch {
+            handlers.onDone?.();
+        }
+        return;
     }
 };
 
@@ -419,34 +426,13 @@ export const streamDiagnosisChat = async (
         const segments = normalized.split('\n');
         buffer = segments.pop() ?? '';
 
-        let sseData: string[] = [];
         for (const segment of segments) {
-            const line = segment.trim();
-            if (!line) {
-                if (sseData.length > 0) {
-                    processStreamPayload(sseData.join('\n'), handlers);
-                    sseData = [];
-                }
-                continue;
-            }
-
-            if (line.startsWith('data:')) {
-                sseData.push(line.slice(5).trim());
-                continue;
-            }
-
-            if (line.startsWith('event:') || line.startsWith(':')) {
-                continue;
-            }
-
-            processStreamPayload(line, handlers);
+            processStreamLine(segment, handlers);
         }
     }
 
     const tail = buffer.trim();
     if (tail) {
-        processStreamPayload(tail.startsWith('data:') ? tail.slice(5).trim() : tail, handlers);
+        processStreamLine(tail, handlers);
     }
-
-    handlers.onDone?.();
 };

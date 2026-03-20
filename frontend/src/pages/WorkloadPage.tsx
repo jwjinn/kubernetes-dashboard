@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
-import { streamDiagnosisChat, type DiagnosisChatMessage, type DiagnosisStreamProgress } from '@/api';
+import {
+    streamDiagnosisChat,
+    type DiagnosisChatMessage,
+    type DiagnosisNodeEvent,
+    type DiagnosisNodeStatus,
+    type DiagnosisStreamProgress,
+} from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,6 +25,8 @@ type ProgressMessage = DiagnosisStreamProgress & {
     createdAt: number;
 };
 
+type NodeStatusMap = Record<string, DiagnosisNodeStatus | string>;
+
 const starterPrompts = [
     '현재 NPU inference 환경 전반 상태를 진단해줘',
     '최근 장애 징후가 있는 파드와 원인을 정리해줘',
@@ -27,6 +35,59 @@ const starterPrompts = [
 
 function buildMessageId() {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const diagnosisNodes = [
+    'start',
+    'router',
+    'simple_agent',
+    'orchestrator',
+    'worker_k8s',
+    'worker_metric',
+    'worker_log',
+    'synthesizer',
+    'agent',
+    'end',
+] as const;
+
+function getNodeLabel(nodeId: string) {
+    switch (nodeId) {
+        case 'start':
+            return '시작';
+        case 'router':
+            return '라우터';
+        case 'simple_agent':
+            return '단일 응답';
+        case 'orchestrator':
+            return '오케스트레이터';
+        case 'worker_k8s':
+            return 'Kubernetes';
+        case 'worker_metric':
+            return '메트릭';
+        case 'worker_log':
+            return '로그';
+        case 'synthesizer':
+            return '종합';
+        case 'agent':
+            return '에이전트';
+        case 'end':
+            return '완료';
+        default:
+            return nodeId;
+    }
+}
+
+function nodeStatusClass(status: DiagnosisNodeStatus | string | undefined) {
+    switch (status) {
+        case 'running':
+            return 'border-blue-200 bg-blue-50 text-blue-700';
+        case 'success':
+            return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+        case 'error':
+            return 'border-rose-200 bg-rose-50 text-rose-700';
+        default:
+            return 'border-border bg-background/70 text-muted-foreground';
+    }
 }
 
 function renderInlineMarkdown(text: string) {
@@ -139,6 +200,7 @@ export default function WorkloadPage() {
     const [input, setInput] = useState('');
     const [isStreaming, setIsStreaming] = useState(false);
     const [progressMessages, setProgressMessages] = useState<ProgressMessage[]>([]);
+    const [nodeStatusMap, setNodeStatusMap] = useState<NodeStatusMap>({});
     const [messages, setMessages] = useState<ChatMessage[]>([
         {
             id: buildMessageId(),
@@ -174,6 +236,13 @@ export default function WorkloadPage() {
                 },
             ];
         });
+    };
+
+    const updateNodeStatus = (event: DiagnosisNodeEvent) => {
+        setNodeStatusMap((prev) => ({
+            ...prev,
+            [event.nodeId]: event.status,
+        }));
     };
 
     const updateAssistantMessage = (assistantId: string, updater: (content: string) => string) => {
@@ -214,6 +283,18 @@ export default function WorkloadPage() {
                 createdAt: Date.now(),
             },
         ]);
+        setNodeStatusMap({
+            start: 'running',
+            router: 'idle',
+            simple_agent: 'idle',
+            orchestrator: 'idle',
+            worker_k8s: 'idle',
+            worker_metric: 'idle',
+            worker_log: 'idle',
+            synthesizer: 'idle',
+            agent: 'idle',
+            end: 'idle',
+        });
         setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
         setInput('');
         setIsStreaming(true);
@@ -222,6 +303,9 @@ export default function WorkloadPage() {
             await streamDiagnosisChat(message, {
                 onProgress: (progress) => {
                     appendProgress(progress);
+                },
+                onNodeStatus: (event) => {
+                    updateNodeStatus(event);
                 },
                 onToken: (token) => {
                     updateAssistantMessage(assistantId, (content) => `${content}${token}`);
@@ -377,6 +461,22 @@ export default function WorkloadPage() {
                                                     진행 이벤트와 응답 토큰을 순차적으로 수신 중입니다.
                                                 </div>
                                             )}
+                                        </div>
+                                        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                                            {diagnosisNodes.map((nodeId) => (
+                                                <div
+                                                    key={nodeId}
+                                                    className={cn(
+                                                        'rounded-xl border px-3 py-2 text-xs',
+                                                        nodeStatusClass(nodeStatusMap[nodeId]),
+                                                    )}
+                                                >
+                                                    <div className="font-medium">{getNodeLabel(nodeId)}</div>
+                                                    <div className="mt-1 text-[11px] uppercase tracking-wide opacity-80">
+                                                        {nodeStatusMap[nodeId] || 'idle'}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
