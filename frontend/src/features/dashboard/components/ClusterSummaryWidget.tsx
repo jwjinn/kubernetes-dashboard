@@ -132,21 +132,27 @@ export function ClusterSummaryWidget() {
 
         const attentionNodes = nodeComparisons.filter((node) => node.hasError || node.nodeRatio >= 70 || node.hottestDevice >= 85).length;
 
-        const statusTone = attentionNodes > 0 || requestRatio >= 70 || hotDevices > 0
-            ? requestRatio >= 90 || errorDevices > 0
-                ? 'border-red-200 bg-red-50 text-red-950'
-                : 'border-amber-200 bg-amber-50 text-amber-950'
-            : 'border-emerald-200 bg-emerald-50 text-emerald-950';
+        const statusTone = errorDevices > 0
+            ? 'border-red-200 bg-red-50 text-red-950'
+            : requestRatio >= 100
+                ? 'border-orange-200 bg-orange-50 text-orange-950'
+                : requestRatio >= 70 || attentionNodes > 0 || hotDevices > 0
+                    ? 'border-amber-200 bg-amber-50 text-amber-950'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-950';
 
-        const statusLabel = requestRatio >= 90 || errorDevices > 0
-            ? '즉시 점검 필요'
-            : requestRatio >= 70 || attentionNodes > 0
-                ? '주의 필요'
-                : '안정';
+        const statusLabel = errorDevices > 0
+            ? '점검 필요'
+            : requestRatio >= 100
+                ? '여유 없음'
+                : requestRatio >= 70 || attentionNodes > 0
+                    ? '여유 부족'
+                    : '안정';
 
-        const summarySentence = `총 ${npuOverview.totalCapacity} NPU 중 ${npuOverview.allocated}개가 요청되어 있으며, 즉시 사용 가능한 여유는 ${available}개입니다.`;
+        const summarySentence = available === 0
+            ? `총 ${npuOverview.totalCapacity} NPU 중 ${npuOverview.allocated}개가 요청되어 있으며, 현재 추가 할당 가능한 여유는 없습니다.`
+            : `총 ${npuOverview.totalCapacity} NPU 중 ${npuOverview.allocated}개가 요청되어 있으며, 즉시 사용 가능한 여유는 ${available}개입니다.`;
         const summaryReason = `근거: 요청률 ${requestRatio}% · 오류 장치 ${errorDevices}개 · 주의 노드 ${attentionNodes}개`;
-        const summaryRuleGuide = '점검 필요: 오류 장치 감지 · 주의: 요청률 70% 이상 또는 고온/주의 노드 존재 · 안정: 그 외';
+        const summaryRuleGuide = '점검 필요: 오류 장치가 감지된 상태 · 여유 없음: 오류는 없지만 추가 할당 가능한 NPU가 없는 상태 · 여유 부족: 요청률 70% 이상 또는 고온/주의 노드 존재 · 안정: 그 외';
 
         return (
             <div className="space-y-6">
