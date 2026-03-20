@@ -43,7 +43,6 @@ const diagnosisNodes = [
     'worker_metric',
     'worker_log',
     'synthesizer',
-    'agent',
     'end',
 ] as const;
 
@@ -84,8 +83,6 @@ function getNodeLabel(nodeId: string) {
             return '로그';
         case 'synthesizer':
             return '종합';
-        case 'agent':
-            return '에이전트';
         case 'end':
             return '완료';
         default:
