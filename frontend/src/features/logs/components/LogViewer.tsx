@@ -157,7 +157,14 @@ export const LogViewer: React.FC<LogViewerProps> = ({ namespace, podName, logSou
                 ) : logs.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-white/20">
                         <SearchCode className="w-8 h-8" />
-                        <p className="text-sm font-medium">No logs found matching criteria</p>
+                        <p className="text-sm font-medium">
+                            {logSource === 'pod' ? '표시할 Pod 로그가 없습니다.' : '표시할 VictoriaLogs 결과가 없습니다.'}
+                        </p>
+                        <p className="max-w-md text-center text-xs text-white/30">
+                            {logSource === 'pod'
+                                ? '컨테이너가 아직 로그를 출력하지 않았거나, 시작 전 상태이거나, 이미 종료되어 현재 로그가 없을 수 있습니다.'
+                                : '수집 지연이 있거나 현재 검색 조건과 시간 범위에 맞는 중앙 로그가 없을 수 있습니다.'}
+                        </p>
                     </div>
                 ) : (
                     <div className="space-y-1">

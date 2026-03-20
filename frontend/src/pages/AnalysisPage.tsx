@@ -20,6 +20,7 @@ import { EventsTab } from '@/features/analysis/components/EventsTab';
 import { MetricsTab } from '@/features/kubernetes/components/MetricsTab';
 import { LogSourceTabs } from '@/features/logs/components/LogSourceTabs';
 import { ExternalLink } from 'lucide-react';
+import { statusDisplayLabel } from '@/features/kubernetes/utils/status';
 
 export default function AnalysisPage() {
     const [searchParams] = useSearchParams();
@@ -76,8 +77,8 @@ export default function AnalysisPage() {
                         <div className="flex gap-2">
                             <Badge color="gray" size="sm" className="px-3 py-1 text-xs">Node: {selectedPod.node}</Badge>
                             <Badge color="gray" size="sm" className="px-3 py-1 text-xs">Namespace: {selectedPod.namespace}</Badge>
-                            <Badge color={selectedPod.status === 'healthy' ? 'blue' : selectedPod.status === 'warning' ? 'yellow' : 'red'} size="sm" className="px-3 py-1 text-xs uppercase font-bold text-white shadow-sm">
-                                Status: {selectedPod.status}
+                            <Badge color={selectedPod.status === 'healthy' ? 'blue' : selectedPod.status === 'warning' ? 'yellow' : 'red'} size="sm" className="px-3 py-1 text-xs font-bold text-white shadow-sm">
+                                상태: {statusDisplayLabel(selectedPod.status)}
                             </Badge>
                         </div>
                     )}
@@ -217,7 +218,7 @@ export default function AnalysisPage() {
                                 Copy Describe
                             </button>
                             <pre className="clear-both whitespace-pre-wrap break-words text-indigo-200">
-                                {isDescribeLoading ? 'Loading describe output...' : (podDescribe || 'Describe output is unavailable.')}
+                                {isDescribeLoading ? 'Describe 정보를 불러오는 중입니다...' : (podDescribe || 'Describe 정보를 불러오지 못했습니다. Pod가 이미 종료되었거나 API 접근이 제한되었을 수 있습니다.')}
                             </pre>
                         </div>
                     </div>

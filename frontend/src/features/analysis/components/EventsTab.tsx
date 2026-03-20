@@ -79,7 +79,8 @@ export function EventsTab({ namespace, podName }: EventsTabProps) {
                 ) : filteredEvents.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                         <Info className="h-8 w-8 opacity-20" />
-                        <p className="text-sm italic">No recent events for this pod.</p>
+                        <p className="text-sm italic">이 Pod에서 표시할 이벤트가 없습니다.</p>
+                        <p className="text-xs text-muted-foreground">기본 Kubernetes 이벤트 TTL은 보통 1시간이라, 오래된 Pod는 이벤트가 비어 보일 수 있습니다.</p>
                     </div>
                 ) : (
                     <ScrollArea className="h-full pr-4">

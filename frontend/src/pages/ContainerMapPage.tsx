@@ -9,6 +9,7 @@ import { ResourceDetailsSheet } from '@/features/kubernetes/components/ResourceD
 import { Zap, Search, Info } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { getEnv } from '@/config/env';
+import { statusDisplayLabel } from '@/features/kubernetes/utils/status';
 
 export default function ContainerMapPage() {
     const [groupBy, setGroupBy] = useState<'node' | 'namespace'>('node');
@@ -120,10 +121,10 @@ export default function ContainerMapPage() {
                                     <SelectValue placeholder="Status" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">All Status</SelectItem>
-                                    <SelectItem value="healthy">Healthy</SelectItem>
-                                    <SelectItem value="warning">Warning</SelectItem>
-                                    <SelectItem value="failed">Failed</SelectItem>
+                                    <SelectItem value="all">전체 상태</SelectItem>
+                                    <SelectItem value="healthy">{statusDisplayLabel('healthy')}</SelectItem>
+                                    <SelectItem value="warning">{statusDisplayLabel('warning')}</SelectItem>
+                                    <SelectItem value="failed">{statusDisplayLabel('failed')}</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -190,7 +191,7 @@ export default function ContainerMapPage() {
                             ))}
                             {filteredContainers.length === 0 && (
                                 <div className="flex flex-col items-center justify-center h-64 text-muted-foreground italic">
-                                    No pods found for the current search/filter
+                                    현재 검색어 또는 상태 필터에 맞는 파드가 없습니다. 필터를 완화하거나 다른 노드/네임스페이스를 확인해보세요.
                                 </div>
                             )}
                         </div>

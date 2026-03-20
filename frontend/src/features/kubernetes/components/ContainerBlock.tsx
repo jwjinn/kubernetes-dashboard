@@ -7,6 +7,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { statusBadgeClass, statusDisplayLabel } from '@/features/kubernetes/utils/status';
 
 export interface ContainerData {
     id: string;
@@ -56,8 +57,8 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
     };
 
     const getStatusBadge = () => {
-        if (isFailed) return { label: 'Failed', className: 'bg-red-500 text-white' };
-        if (isWarning) return { label: 'Warning', className: 'bg-amber-400 text-amber-950' };
+        if (isFailed) return { label: statusDisplayLabel('failed'), className: statusBadgeClass('failed') };
+        if (isWarning) return { label: statusDisplayLabel('warning'), className: statusBadgeClass('warning') };
         return { label: isNpu ? 'NPU' : 'CPU', className: isNpu ? 'bg-indigo-500 text-white' : 'bg-emerald-500 text-white' };
     };
 

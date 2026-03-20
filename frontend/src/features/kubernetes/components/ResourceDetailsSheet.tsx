@@ -8,6 +8,7 @@ import { PodEventsTab } from './PodEventsTab';
 import { LogSourceTabs } from '@/features/logs/components/LogSourceTabs';
 import { Box, Activity, FileText, Settings, Webhook, Maximize2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { statusAccentClass, statusDisplayLabel } from '@/features/kubernetes/utils/status';
 
 interface ResourceDetailsSheetProps {
     container: ContainerData | null;
@@ -30,7 +31,7 @@ export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDet
                 <SheetHeader className="p-6 border-b border-border bg-card">
                     <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded shadow flex items-center justify-center
-              ${container.status === 'failed' ? 'bg-red-500' : container.status === 'warning' ? 'bg-yellow-500' : 'bg-emerald-500'} text-white`}>
+              ${statusAccentClass(container.status)} text-white`}>
                             <Box className="w-5 h-5" />
                         </div>
                         <div>
@@ -38,7 +39,7 @@ export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDet
                             <SheetDescription className="mt-1 flex items-center gap-4 text-xs font-medium">
                                 <span><strong className="text-foreground">Namespace:</strong> {container.namespace}</span>
                                 <span><strong className="text-foreground">Node:</strong> {container.node}</span>
-                                <span className="uppercase tracking-wider opacity-80">{container.status}</span>
+                                <span className="tracking-wider opacity-80">{statusDisplayLabel(container.status)}</span>
                                 {container.statusReason && <span><strong className="text-foreground">Reason:</strong> {container.statusReason}</span>}
                             </SheetDescription>
                         </div>

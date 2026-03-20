@@ -30,7 +30,8 @@ export function PodEventsTab({ namespace, podName }: PodEventsTabProps) {
         return (
             <div className="flex flex-col h-full items-center justify-center text-muted-foreground gap-2">
                 <Info className="w-8 h-8 opacity-20" />
-                <p className="text-sm italic">No recent events for this pod.</p>
+                <p className="text-sm italic">이 Pod에서 표시할 이벤트가 없습니다.</p>
+                <p className="text-xs text-center text-muted-foreground">기본 Kubernetes 이벤트 TTL은 보통 1시간이라, 오래된 Pod는 이벤트가 남아 있지 않을 수 있습니다.</p>
             </div>
         );
     }
