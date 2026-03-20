@@ -24,6 +24,112 @@ function buildMessageId() {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function renderInlineMarkdown(text: string) {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, index) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={`${part}-${index}`} className="font-semibold">{part.slice(2, -2)}</strong>;
+        }
+        return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
+    });
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+    const lines = content.replace(/\r\n/g, '\n').split('\n');
+    const elements: React.ReactNode[] = [];
+    let bulletItems: string[] = [];
+    let orderedItems: string[] = [];
+    let paragraphLines: string[] = [];
+
+    const flushParagraph = () => {
+        if (paragraphLines.length === 0) return;
+        elements.push(
+            <p key={`p-${elements.length}`} className="whitespace-pre-wrap leading-6">
+                {renderInlineMarkdown(paragraphLines.join(' '))}
+            </p>,
+        );
+        paragraphLines = [];
+    };
+
+    const flushBullets = () => {
+        if (bulletItems.length === 0) return;
+        elements.push(
+            <ul key={`ul-${elements.length}`} className="list-disc space-y-1 pl-5">
+                {bulletItems.map((item, index) => (
+                    <li key={`ul-item-${index}`}>{renderInlineMarkdown(item)}</li>
+                ))}
+            </ul>,
+        );
+        bulletItems = [];
+    };
+
+    const flushOrdered = () => {
+        if (orderedItems.length === 0) return;
+        elements.push(
+            <ol key={`ol-${elements.length}`} className="list-decimal space-y-1 pl-5">
+                {orderedItems.map((item, index) => (
+                    <li key={`ol-item-${index}`}>{renderInlineMarkdown(item)}</li>
+                ))}
+            </ol>,
+        );
+        orderedItems = [];
+    };
+
+    lines.forEach((line) => {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+            flushParagraph();
+            flushBullets();
+            flushOrdered();
+            return;
+        }
+
+        const heading = trimmed.match(/^(#{1,4})\s+(.*)$/);
+        if (heading) {
+            flushParagraph();
+            flushBullets();
+            flushOrdered();
+
+            const level = heading[1].length;
+            const text = heading[2];
+            const className = level <= 2
+                ? 'text-base font-semibold'
+                : 'text-sm font-semibold';
+            elements.push(
+                <div key={`h-${elements.length}`} className={className}>
+                    {renderInlineMarkdown(text)}
+                </div>,
+            );
+            return;
+        }
+
+        const bullet = trimmed.match(/^[-*]\s+(.*)$/);
+        if (bullet) {
+            flushParagraph();
+            flushOrdered();
+            bulletItems.push(bullet[1]);
+            return;
+        }
+
+        const ordered = trimmed.match(/^\d+\.\s+(.*)$/);
+        if (ordered) {
+            flushParagraph();
+            flushBullets();
+            orderedItems.push(ordered[1]);
+            return;
+        }
+
+        paragraphLines.push(trimmed);
+    });
+
+    flushParagraph();
+    flushBullets();
+    flushOrdered();
+
+    return <div className="space-y-3 text-sm leading-6">{elements}</div>;
+}
+
 export default function WorkloadPage() {
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>([
@@ -118,7 +224,7 @@ export default function WorkloadPage() {
                 </div>
 
                 <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-                    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
+                    <div className="hidden flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm xl:flex">
                         <div>
                             <p className="text-sm font-bold text-foreground">추천 질문</p>
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -153,6 +259,18 @@ export default function WorkloadPage() {
                             <p className="mt-1 text-xs text-muted-foreground">
                                 자연어로 질문하면 AI Agent가 인프라 상태를 진단하고 원인 및 조치 방향을 정리합니다.
                             </p>
+                            <div className="mt-3 flex flex-wrap gap-2 xl:hidden">
+                                {starterPrompts.map((prompt) => (
+                                    <button
+                                        key={`compact-${prompt}`}
+                                        onClick={() => submitMessage(prompt)}
+                                        disabled={diagnosisMutation.isPending}
+                                        className="rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {prompt}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         <ScrollArea className="min-h-0 flex-1">
@@ -176,9 +294,13 @@ export default function WorkloadPage() {
                                                 {message.role === 'user' ? '사용자' : 'AI Agent'}
                                                 <span>{formatClockTime(message.createdAt)}</span>
                                             </div>
-                                            <div className="whitespace-pre-wrap text-sm leading-6">
-                                                {message.content}
-                                            </div>
+                                            {message.role === 'assistant'
+                                                ? <MarkdownMessage content={message.content} />
+                                                : (
+                                                    <div className="whitespace-pre-wrap text-sm leading-6">
+                                                        {message.content}
+                                                    </div>
+                                                )}
                                         </div>
                                     </div>
                                 ))}
