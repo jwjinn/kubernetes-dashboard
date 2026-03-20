@@ -437,6 +437,9 @@ export default function WorkloadPage() {
                                 className="space-y-4 p-5"
                             >
                                 {messages.map((message) => (
+                                    message.role === 'assistant' && !message.content.trim()
+                                        ? null
+                                        : (
                                     <div
                                         key={message.id}
                                         className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -459,6 +462,7 @@ export default function WorkloadPage() {
                                                 )}
                                         </div>
                                     </div>
+                                        )
                                 ))}
 
                                 {isStreaming && (
