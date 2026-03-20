@@ -265,7 +265,7 @@ export default function ClusterDashboardPage() {
                                         </Flex>
                                         <ProgressBar
                                             value={node.fsUsedPercent}
-                                            color={node.fsUsedPercent > 80 ? 'red' : (node.fsUsedPercent > 60 ? 'orange' : 'emerald')}
+                                            color={node.fsUsedPercent > 80 ? 'red' : (node.fsUsedPercent > 60 ? 'amber' : 'emerald')}
                                             className="h-2"
                                         />
                                     </div>
