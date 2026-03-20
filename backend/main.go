@@ -95,7 +95,7 @@ func main() {
 		allowedOrigin:              envOrDefault("FRONTEND_ORIGIN", defaultFrontendOrigin),
 		responseCache:              newTTLCache(),
 		observability:              newObservabilityClient(),
-		mcpAgentBaseURL:            strings.TrimRight(envOrDefault("MCP_AGENT_BASE_URL", "http://mcp-agent-npu.mcp.svc.cluster.local"), "/"),
+		mcpAgentBaseURL:            strings.TrimRight(strings.TrimSpace(os.Getenv("MCP_AGENT_BASE_URL")), "/"),
 		nodeMetricsJob:             envOrDefault("NODE_METRICS_JOB", "node-exporter"),
 		nodeCluster:                strings.TrimSpace(os.Getenv("NODE_METRICS_CLUSTER")),
 		nodeMetricsMappingStrategy: envOrDefault("NODE_METRICS_MAPPING_STRATEGY", "auto"),
@@ -153,6 +153,7 @@ func main() {
 
 	log.Printf("backend listening on http://localhost:%s", port)
 	log.Printf("kubernetes auth enabled: %t", application.authEnabled)
+	log.Printf("mcp agent base URL configured: %t", application.mcpAgentBaseURL != "")
 	log.Printf("informer cache resync interval: %s", cacheResync)
 	log.Printf(
 		"node metrics mapping: strategy=%s job=%s cluster=%q podNamespace=%q podNameRegex=%q podInfoMetric=%s",
