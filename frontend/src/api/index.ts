@@ -323,7 +323,7 @@ const createThinkFilter = (onToken?: (token: string) => void) => {
                 const closeIndex = lowerBuffer.indexOf(thinkCloseTag);
                 if (closeIndex === -1) {
                     const keepLength = longestSuffixPrefixLength(buffer, thinkCloseTag);
-                    buffer = buffer.slice(-keepLength);
+                    buffer = keepLength > 0 ? buffer.slice(-keepLength) : '';
                     return;
                 }
 
@@ -336,7 +336,7 @@ const createThinkFilter = (onToken?: (token: string) => void) => {
             if (openIndex === -1) {
                 const keepLength = longestSuffixPrefixLength(buffer, thinkOpenTag);
                 emit(buffer.slice(0, buffer.length - keepLength));
-                buffer = buffer.slice(-keepLength);
+                buffer = keepLength > 0 ? buffer.slice(-keepLength) : '';
                 return;
             }
 
