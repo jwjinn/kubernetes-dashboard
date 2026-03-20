@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchLogs } from '@/api';
+import { fetchLogs, fetchPodLogs } from '@/api';
 import {
-    Search, Filter, Trash2, Download,
-    Play, Pause, ChevronDown, Terminal,
-    AlertCircle, Info, AlertTriangle, SearchCode
+    Search, Trash2, Download,
+    ChevronDown, Terminal,
+    SearchCode
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import {
     Select,
@@ -25,11 +24,13 @@ interface LogEntry {
 }
 
 interface LogViewerProps {
+    namespace?: string;
     podName?: string;
+    logSource?: 'pod' | 'victoria';
     height?: string;
 }
 
-export const LogViewer: React.FC<LogViewerProps> = ({ podName, height = "h-96" }) => {
+export const LogViewer: React.FC<LogViewerProps> = ({ namespace, podName, logSource = 'victoria', height = "h-96" }) => {
     const [search, setSearch] = useState('');
     const [level, setLevel] = useState('ALL');
     const [isLive, setIsLive] = useState(true);
@@ -37,8 +38,11 @@ export const LogViewer: React.FC<LogViewerProps> = ({ podName, height = "h-96" }
     const [autoScroll, setAutoScroll] = useState(true);
 
     const { data: logs = [], isLoading } = useQuery<LogEntry[]>({
-        queryKey: ['logs', podName, level, search],
-        queryFn: () => fetchLogs(podName, level, search),
+        queryKey: ['logs', logSource, namespace, podName, level, search],
+        queryFn: () => logSource === 'pod'
+            ? fetchPodLogs(namespace || '', podName || '', level, search)
+            : fetchLogs(podName, level, search),
+        enabled: logSource === 'victoria' || (!!namespace && !!podName),
         refetchInterval: isLive ? 2000 : false,
     });
 
@@ -148,7 +152,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ podName, height = "h-96" }
                 {isLoading && logs.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-white/20">
                         <Terminal className="w-8 h-8 animate-pulse" />
-                        <p className="text-sm font-medium">Fetching logs from {podName || 'cluster'}...</p>
+                        <p className="text-sm font-medium">Fetching {logSource === 'pod' ? 'pod logs' : 'VictoriaLogs'} from {podName || 'cluster'}...</p>
                     </div>
                 ) : logs.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-white/20">
@@ -177,10 +181,15 @@ export const LogViewer: React.FC<LogViewerProps> = ({ podName, height = "h-96" }
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                         Total: <span className="text-white/80">{logs.length} Lines</span>
                     </span>
-                    {!podName && (
+                    {!podName ? (
                         <span className="flex items-center gap-1.5 text-white/40">
                             <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                             Source: <span className="text-white/80 italic">Global Explorer</span>
+                        </span>
+                    ) : (
+                        <span className="flex items-center gap-1.5 text-white/40">
+                            <div className={`w-1.5 h-1.5 rounded-full ${logSource === 'pod' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                            Source: <span className="text-white/80 italic">{logSource === 'pod' ? 'Kubernetes Pod Logs' : 'VictoriaLogs'}</span>
                         </span>
                     )}
                 </div>

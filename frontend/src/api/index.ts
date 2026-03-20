@@ -233,3 +233,13 @@ export const fetchLogs = async (podName?: string, level?: string, search?: strin
     if (!response.ok) throw new Error('Failed to fetch logs');
     return response.json();
 };
+
+export const fetchPodLogs = async (namespace: string, podName: string, level?: string, search?: string) => {
+    const params = new URLSearchParams({ namespace, podName });
+    if (level) params.set('level', level);
+    if (search) params.set('search', search);
+
+    const response = await apiFetch(`/api/k8s/pod-logs?${params.toString()}`);
+    if (!response.ok) throw new Error('Failed to fetch pod logs');
+    return response.json();
+};

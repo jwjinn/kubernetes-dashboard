@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -406,6 +407,85 @@ func (a *app) handleLogs(w http.ResponseWriter, r *http.Request) {
 				Source:    stringField(row, "k8s.pod.name", stringField(row, "pod", podName)),
 			})
 		}
+		return entries, nil
+	})
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (a *app) handlePodLogs(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	podName := strings.TrimSpace(r.URL.Query().Get("podName"))
+	level := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("level")))
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	if namespace == "" || podName == "" {
+		writeError(w, http.StatusBadRequest, "namespace and podName are required")
+		return
+	}
+
+	cacheKey := fmt.Sprintf("podlogs:%s:%s:%s:%s", namespace, podName, level, search)
+	payload, err := a.responseCache.GetOrSet(cacheKey, a.logsTTL, func() (any, error) {
+		pod, err := a.clusterCache.GetPod(namespace, podName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve pod %s/%s: %w", namespace, podName, err)
+		}
+		if len(pod.Spec.Containers) == 0 {
+			return []logEntry{}, nil
+		}
+
+		containerName := pod.Spec.Containers[0].Name
+		tailLines := int64(200)
+		req := a.kubeClient.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+			Container:  containerName,
+			TailLines:  &tailLines,
+			Timestamps: true,
+		})
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		stream, err := req.Stream(ctx)
+		if err != nil {
+			log.Printf("failed to stream pod logs for %s/%s: %v", namespace, podName, err)
+			return []logEntry{}, nil
+		}
+		defer stream.Close()
+
+		body, err := io.ReadAll(stream)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read pod logs for %s/%s: %w", namespace, podName, err)
+		}
+
+		lines := strings.Split(string(body), "\n")
+		entries := make([]logEntry, 0, len(lines))
+		for idx, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			timestamp, message := splitPodLogLine(line)
+			entryLevel := inferLogLevel(message)
+			if level != "" && level != "ALL" && entryLevel != level {
+				continue
+			}
+			if search != "" && !strings.Contains(strings.ToLower(message), strings.ToLower(search)) {
+				continue
+			}
+
+			entries = append(entries, logEntry{
+				ID:        fmt.Sprintf("%s/%s/%d", namespace, podName, idx),
+				Timestamp: timestamp,
+				Level:     entryLevel,
+				Message:   message,
+				Source:    fmt.Sprintf("%s/%s", namespace, podName),
+			})
+		}
+
 		return entries, nil
 	})
 	if err != nil {
@@ -944,6 +1024,16 @@ func podVisualStatus(pod corev1.Pod) (string, string) {
 	if pod.Status.Phase == corev1.PodFailed {
 		return "failed", fmt.Sprintf("Pod phase is %s", pod.Status.Phase)
 	}
+	for _, status := range append([]corev1.ContainerStatus{}, pod.Status.InitContainerStatuses...) {
+		if status.State.Waiting != nil && strings.TrimSpace(status.State.Waiting.Reason) != "" {
+			return "warning", fmt.Sprintf("Init container %s is %s", status.Name, status.State.Waiting.Reason)
+		}
+	}
+	for _, status := range pod.Status.ContainerStatuses {
+		if status.State.Waiting != nil && strings.TrimSpace(status.State.Waiting.Reason) != "" {
+			return "warning", fmt.Sprintf("Container %s is %s", status.Name, status.State.Waiting.Reason)
+		}
+	}
 	if pod.Status.Phase != corev1.PodRunning {
 		return "warning", fmt.Sprintf("Pod phase is %s", pod.Status.Phase)
 	}
@@ -1150,5 +1240,30 @@ func normalizeLevel(raw any) string {
 		return "INFO"
 	default:
 		return value
+	}
+}
+
+func splitPodLogLine(line string) (string, string) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return time.Now().Format("2006-01-02 15:04:05.000"), ""
+	}
+	if _, err := time.Parse(time.RFC3339Nano, fields[0]); err == nil {
+		return normalizeTimestamp(fields[0]), strings.TrimSpace(strings.TrimPrefix(line, fields[0]))
+	}
+	return time.Now().Format("2006-01-02 15:04:05.000"), line
+}
+
+func inferLogLevel(message string) string {
+	upper := strings.ToUpper(message)
+	switch {
+	case strings.Contains(upper, "ERROR"):
+		return "ERROR"
+	case strings.Contains(upper, "WARN"):
+		return "WARN"
+	case strings.Contains(upper, "DEBUG"):
+		return "DEBUG"
+	default:
+		return "INFO"
 	}
 }

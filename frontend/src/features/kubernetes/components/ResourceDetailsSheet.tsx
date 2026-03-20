@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ContainerData } from './ContainerBlock';
 import { MetricsTab } from './MetricsTab';
 import { PodEventsTab } from './PodEventsTab';
-import { LogViewer } from '@/features/logs/components/LogViewer';
+import { LogSourceTabs } from '@/features/logs/components/LogSourceTabs';
 import { Box, Activity, FileText, Settings, Webhook, Maximize2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -69,7 +69,7 @@ export function ResourceDetailsSheet({ container, isOpen, onClose }: ResourceDet
                             </TabsContent>
 
                             <TabsContent value="logs" className="h-full m-0 p-0">
-                                <LogViewer podName={container.name} height="h-full" />
+                                <LogSourceTabs namespace={container.namespace} podName={container.name} height="h-full" />
                             </TabsContent>
 
                             <TabsContent value="events" className="h-full m-0 p-0">

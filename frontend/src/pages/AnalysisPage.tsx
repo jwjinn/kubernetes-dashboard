@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { EventsTab } from '@/features/analysis/components/EventsTab';
 import { MetricsTab } from '@/features/kubernetes/components/MetricsTab';
-import { LogViewer } from '@/features/logs/components/LogViewer';
+import { LogSourceTabs } from '@/features/logs/components/LogSourceTabs';
 import { ExternalLink } from 'lucide-react';
 
 export default function AnalysisPage() {
@@ -176,7 +176,7 @@ export default function AnalysisPage() {
                                 {selectedTab === 1 && (
                                     <div className="h-full flex flex-col">
                                         {selectedPod ? (
-                                            <LogViewer podName={selectedPod.name} height="h-full" />
+                                            <LogSourceTabs namespace={selectedPod.namespace} podName={selectedPod.name} height="h-full" />
                                         ) : (
                                             <div className="flex-1 flex items-center justify-center text-muted-foreground bg-muted/10 rounded-xl border border-dashed border-border">
                                                 대상을 선택해주세요.
