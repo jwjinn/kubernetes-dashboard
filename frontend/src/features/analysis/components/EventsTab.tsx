@@ -74,7 +74,7 @@ export function EventsTab({ namespace, podName }: EventsTabProps) {
 
                 {isLoading ? (
                     <div className="flex h-full items-center justify-center text-sm text-muted-foreground animate-pulse">
-                        Loading events...
+                        이벤트를 불러오는 중입니다...
                     </div>
                 ) : filteredEvents.length === 0 ? (
                     <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">

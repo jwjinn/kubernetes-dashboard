@@ -21,6 +21,7 @@ import { MetricsTab } from '@/features/kubernetes/components/MetricsTab';
 import { LogSourceTabs } from '@/features/logs/components/LogSourceTabs';
 import { ExternalLink } from 'lucide-react';
 import { statusDisplayLabel } from '@/features/kubernetes/utils/status';
+import { formatClockTime } from '@/lib/format';
 
 export default function AnalysisPage() {
     const [searchParams] = useSearchParams();
@@ -32,7 +33,7 @@ export default function AnalysisPage() {
     const [isManifestOpen, setIsManifestOpen] = useState(false);
     const navigate = useNavigate();
 
-    const { data: containers = [], isLoading } = useQuery<ContainerData[]>({
+    const { data: containers = [], isLoading, dataUpdatedAt } = useQuery<ContainerData[]>({
         queryKey: ['containerMap'],
         queryFn: fetchContainerMap,
         refetchInterval: 5000,
@@ -71,6 +72,11 @@ export default function AnalysisPage() {
                             <p className="text-muted-foreground text-xs font-medium">
                                 {selectedPod ? '단일 파드 상세 분석 및 리소스 진단' : 'Container Map에서 분석할 대상을 선택해주세요.'}
                             </p>
+                            {selectedPod && (
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                    마지막 갱신 {formatClockTime(dataUpdatedAt)}
+                                </p>
+                            )}
                         </div>
                     </div>
                     {selectedPod && (

@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, ChevronRight, Server, Workflow } from 'lucide-react';
 import { getEnv } from '@/config/env';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
+import { formatClockTime } from '@/lib/format';
 
 type NpuDeviceSummary = {
     node: string;
@@ -56,6 +57,9 @@ export function ClusterSummaryWidget() {
     if (isLoading) {
         return <div className="animate-pulse flex gap-4"><Card className="h-32 w-full" /><Card className="h-32 w-full" /><Card className="h-32 w-full" /></div>;
     }
+    const lastUpdatedAt = isNpu
+        ? Math.max(npuOverviewQuery.dataUpdatedAt, npuHardwareQuery.dataUpdatedAt, npuWorkloadQuery.dataUpdatedAt)
+        : clusterSummaryQuery.dataUpdatedAt;
 
     const data = clusterSummaryQuery.data;
     const npuOverview = npuOverviewQuery.data;
@@ -156,7 +160,8 @@ export function ClusterSummaryWidget() {
                             <h3 className="mt-3 text-lg font-bold">메인 클러스터 요약</h3>
                             <p className="mt-2 text-sm leading-6 opacity-90">{summarySentence}</p>
                             <p className="mt-3 text-xs font-medium opacity-90">{summaryReason}</p>
-                            <div className="mt-2 inline-flex items-center gap-2 text-xs opacity-80">
+                            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs opacity-80">
+                                <span>마지막 갱신 {formatClockTime(lastUpdatedAt)}</span>
                                 <span>판단 기준 보기</span>
                                 <InfoTooltip content={summaryRuleGuide} />
                             </div>

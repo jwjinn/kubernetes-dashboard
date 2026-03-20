@@ -152,7 +152,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ namespace, podName, logSou
                 {isLoading && logs.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-white/20">
                         <Terminal className="w-8 h-8 animate-pulse" />
-                        <p className="text-sm font-medium">Fetching {logSource === 'pod' ? 'pod logs' : 'VictoriaLogs'} from {podName || 'cluster'}...</p>
+                        <p className="text-sm font-medium">{logSource === 'pod' ? 'Pod 로그를 불러오는 중입니다...' : 'VictoriaLogs를 불러오는 중입니다...'}</p>
                     </div>
                 ) : logs.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-white/20">

@@ -21,7 +21,7 @@ export function PodEventsTab({ namespace, podName }: PodEventsTabProps) {
     if (isLoading) {
         return (
             <div className="flex h-full items-center justify-center animate-pulse text-muted-foreground text-sm">
-                Fetching event stream...
+                이벤트 스트림을 불러오는 중입니다...
             </div>
         );
     }

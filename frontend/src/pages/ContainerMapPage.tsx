@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchContainerMap } from '@/api';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
@@ -10,6 +10,7 @@ import { Zap, Search, Info } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { getEnv } from '@/config/env';
 import { statusDisplayLabel } from '@/features/kubernetes/utils/status';
+import { formatClockTime } from '@/lib/format';
 
 export default function ContainerMapPage() {
     const [groupBy, setGroupBy] = useState<'node' | 'namespace'>('node');
@@ -21,12 +22,45 @@ export default function ContainerMapPage() {
 
     const acceleratorMode = getEnv('VITE_ACCELERATOR_TYPE', 'GPU');
 
-    const { data: containers = [], isLoading } = useQuery<ContainerData[]>({
+    const { data: containers = [], isLoading, dataUpdatedAt } = useQuery<ContainerData[]>({
         queryKey: ['containerMap'],
         queryFn: fetchContainerMap,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
     });
+    const previousSnapshotRef = useRef<Map<string, string>>(new Map());
+    const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (containers.length === 0) return;
+
+        const changedIds = new Set<string>();
+        const nextSnapshot = new Map<string, string>();
+
+        containers.forEach((container) => {
+            const signature = `${container.status}|${container.statusReason || ''}`;
+            nextSnapshot.set(container.id, signature);
+            const previous = previousSnapshotRef.current.get(container.id);
+            if (previous && previous !== signature) {
+                changedIds.add(container.id);
+            }
+        });
+
+        previousSnapshotRef.current = nextSnapshot;
+
+        if (changedIds.size > 0) {
+            setRecentlyChangedIds((prev) => new Set([...prev, ...changedIds]));
+            const timeout = window.setTimeout(() => {
+                setRecentlyChangedIds((prev) => {
+                    const next = new Set(prev);
+                    changedIds.forEach((id) => next.delete(id));
+                    return next;
+                });
+            }, 60000);
+
+            return () => window.clearTimeout(timeout);
+        }
+    }, [containers]);
 
     const handleContainerClick = (container: ContainerData) => {
         setSelectedContainer(container);
@@ -74,6 +108,10 @@ export default function ContainerMapPage() {
                         <p className="text-muted-foreground text-sm mt-1 mb-4">
                             클러스터 리소스 상태를 가시화합니다. 블록 위로 마우스를 올려 상세 정보를 확인하세요.
                         </p>
+                        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <span>마지막 갱신 {formatClockTime(dataUpdatedAt)}</span>
+                            <span>최근 변경 {recentlyChangedIds.size}건</span>
+                        </div>
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px]">
                             <div className="flex items-center gap-1.5">
                                 <div className="w-3 h-3 rounded-sm bg-indigo-500"></div>
@@ -158,7 +196,7 @@ export default function ContainerMapPage() {
                 <div className="flex-1 bg-card/50 border border-border rounded-xl shadow-inner overflow-auto p-6 min-h-[600px]">
                     {isLoading ? (
                         <div className="flex h-64 items-center justify-center animate-pulse text-muted-foreground">
-                            Processing cluster topology...
+                            클러스터 상태를 불러오는 중입니다...
                         </div>
                     ) : (
                         <div className="space-y-10">
@@ -180,6 +218,7 @@ export default function ContainerMapPage() {
                                                     key={item.id}
                                                     data={item}
                                                     onClick={handleContainerClick}
+                                                    recentlyChanged={recentlyChangedIds.has(item.id)}
                                                     isHighlighted={isHighlighted}
                                                     isDimmed={isDimmed}
                                                     onHover={(id) => setHoveredPodId(id)}

@@ -16,7 +16,7 @@ export function MetricsTab({ containerId }: MetricsTabProps) {
     });
 
     if (isLoading || !data) {
-        return <div className="animate-pulse h-64 bg-muted/20 rounded-md"></div>;
+        return <div className="flex h-64 items-center justify-center rounded-md bg-muted/20 text-sm text-muted-foreground animate-pulse">메트릭을 불러오는 중입니다...</div>;
     }
 
     const optionCpuMem = {

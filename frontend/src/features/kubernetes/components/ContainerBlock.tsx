@@ -39,12 +39,13 @@ export interface ContainerData {
 interface ContainerBlockProps {
     data: ContainerData;
     onClick: (data: ContainerData) => void;
+    recentlyChanged?: boolean;
     isHighlighted?: boolean;
     isDimmed?: boolean;
     onHover?: (name: string | null) => void;
 }
 
-export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover }: ContainerBlockProps) {
+export function ContainerBlock({ data, onClick, recentlyChanged, isHighlighted, isDimmed, onHover }: ContainerBlockProps) {
     const isNpu = data.resourceType === 'NPU';
     const isWarning = data.status === 'warning';
     const isFailed = data.status === 'failed';
@@ -105,7 +106,14 @@ export function ContainerBlock({ data, onClick, isHighlighted, isDimmed, onHover
                             <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold", statusBadge.className)}>
                                 {statusBadge.label}
                             </span>
-                            {isWarning && <Info className="w-3 h-3 text-amber-700" />}
+                            <div className="flex items-center gap-1">
+                                {recentlyChanged && (
+                                    <span className="rounded bg-sky-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                                        변경
+                                    </span>
+                                )}
+                                {isWarning && <Info className="w-3 h-3 text-amber-700" />}
+                            </div>
                         </div>
 
                         {data.hasTrace && (
