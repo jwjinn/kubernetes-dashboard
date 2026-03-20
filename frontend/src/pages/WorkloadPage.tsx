@@ -401,22 +401,22 @@ export default function WorkloadPage() {
                                     </button>
                                 ))}
                             </div>
-                            <div className="mt-4 rounded-2xl border border-border bg-muted/20 p-4">
-                                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                            <div className="mt-4 rounded-2xl border border-border bg-muted/20 p-3">
+                                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                                     {diagnosisNodes.map((nodeId) => (
                                         <div
                                             key={nodeId}
                                             className={cn(
-                                                'rounded-xl border px-3 py-2 text-xs',
+                                                'rounded-lg border px-2.5 py-2 text-[11px]',
                                                 nodeStatusClass(nodeStatusMap[nodeId]),
                                             )}
                                         >
-                                            <div className="font-medium">{getNodeLabel(nodeId)}</div>
-                                            <div className="mt-1 text-[11px] uppercase tracking-wide opacity-80">
+                                            <div className="font-medium leading-4">{getNodeLabel(nodeId)}</div>
+                                            <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-80">
                                                 {nodeStatusMap[nodeId] || 'idle'}
                                             </div>
                                             {nodeErrorMap[nodeId] && (
-                                                <div className="mt-1 line-clamp-2 text-[11px] normal-case tracking-normal opacity-80">
+                                                <div className="mt-1 line-clamp-2 text-[10px] normal-case tracking-normal opacity-80">
                                                     {nodeErrorMap[nodeId]}
                                                 </div>
                                             )}
