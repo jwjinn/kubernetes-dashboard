@@ -18,7 +18,8 @@ Kubernetes 기반 AI 인프라를 운영하기 위한 대시보드입니다.
 이 대시보드는 다음과 같은 상황을 위해 만들어졌습니다.
 
 - 여러 노드와 워크로드를 한 번에 보고 싶을 때
-- GPU/NPU 같은 가속기 자원 사용 현황을 빠르게 확인하고 싶을 때
+- NPU 가속기 자원 사용 현황을 빠르게 확인하고 싶을 때
+- GPU 지원은 향후 확장 예정인 상태에서, 현재 우선 개발 완료된 NPU 운영 화면을 활용하고 싶을 때
 - 특정 Pod의 메트릭, 로그, 이벤트, describe 정보를 한 자리에서 보고 싶을 때
 - Keycloak 인증과 observability 스택을 포함한 운영 환경에 맞춰 대시보드를 배포하고 싶을 때
 
@@ -39,7 +40,8 @@ Kubernetes 기반 AI 인프라를 운영하기 위한 대시보드입니다.
   - 로그
   - 이벤트
   - describe 정보
-- GPU/NPU 장비 현황 및 워크로드 매핑
+- NPU 장비 현황 및 워크로드 매핑
+- GPU 화면은 구조를 고려해두었고, 현재는 NPU 기능을 우선 개발 완료
 - Keycloak OIDC 로그인
 - VictoriaMetrics / VictoriaLogs / VictoriaTraces 연동
 - 운영 진단용 챗 API 연동
@@ -208,12 +210,15 @@ flowchart LR
 
     TR --> FE
     FE --> BE
+    FE --> KC
     BE --> KC
     KC --> PG
     BE --> VM
     BE --> VLOGS
     BE --> VTRACES
     BE --> MCPAGENT
+    MCPAGENT --> APP1
+    MCPAGENT --> APP2
     OTEL --> VM
     VM --> GRAFANA
 
@@ -232,7 +237,8 @@ flowchart LR
 
 ### `npu-dashboard` Namespace
 
-대시보드 본체와 AI 워크로드가 함께 존재하는 네임스페이스입니다.
+대시보드 본체와 AI 워크로드가 함께 존재하는 네임스페이스입니다.  
+현재 이 README에 적은 환경 예시는 리벨리온 NPU 환경에서 실제로 구동한 배포 스냅샷을 기준으로 정리했습니다.
 
 #### Pods
 
@@ -412,13 +418,14 @@ flowchart LR
 
 ### Dashboard Runtime Dependency Map
 
-대시보드 백엔드는 다음 내부 서비스에 의존합니다.
+대시보드 런타임은 아래 내부 서비스에 의존합니다.  
+여기서는 frontend와 backend의 실제 통신 관계, 그리고 `mcp-agent-npu`와 NPU inference workload 간 연결도 함께 표현합니다.
 
 ```mermaid
 %%{init: {
   "theme": "base",
   "themeVariables": {
-    "fontSize": "20px",
+    "fontSize": "24px",
     "fontFamily": "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
     "primaryColor": "#eef2ff",
     "primaryBorderColor": "#4f46e5",
@@ -428,13 +435,14 @@ flowchart LR
     "clusterBorder": "#cbd5e1"
   },
   "flowchart": {
-    "nodeSpacing": 34,
-    "rankSpacing": 56,
+    "nodeSpacing": 52,
+    "rankSpacing": 78,
     "curve": "basis",
     "useMaxWidth": true
   }
 }}%%
-flowchart TB
+flowchart LR
+    FE[dashboard-frontend]
     BE[dashboard-backend]
 
     subgraph AUTH[Authentication]
@@ -448,11 +456,15 @@ flowchart TB
         OTEL[otel-collector-collector.observability.svc.cluster.local:4318]
     end
 
-    subgraph OPS[Operations]
+    subgraph OPS[Diagnosis and AI Workloads]
         MCP[mcp-agent-npu.mcp.svc.cluster.local]
+        APP1[qwen3-vllm-worker01]
+        APP2[qwen3-vllm-worker02]
         K8S[Kubernetes API]
     end
 
+    FE --> KC
+    FE --> BE
     BE --> KC
     BE --> METRICS
     BE --> LOGS
@@ -460,16 +472,18 @@ flowchart TB
     BE --> OTEL
     BE --> MCP
     BE --> K8S
+    MCP --> APP1
+    MCP --> APP2
 
     classDef core fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#111827;
     classDef auth fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#111827;
     classDef obs fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#111827;
     classDef ops fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#111827;
 
-    class BE core;
+    class FE,BE core;
     class KC auth;
     class METRICS,LOGS,TRACES,OTEL obs;
-    class MCP,K8S ops;
+    class MCP,APP1,APP2,K8S ops;
 ```
 
 ### Deployment Notes
@@ -479,8 +493,9 @@ flowchart TB
 - `dashboard-frontend`와 `dashboard-backend`는 모두 `ClusterIP`로 운영합니다.
 - 외부 공개는 Traefik Ingress를 통해서만 처리합니다.
 - 인증은 Keycloak OIDC를 사용합니다.
+- frontend와 backend는 모두 Keycloak과 통신하며, 각각 브라우저 로그인 흐름과 서버 측 토큰 검증을 담당합니다.
 - 메트릭, 로그, 트레이스는 observability 네임스페이스의 내부 Service DNS를 통해 조회합니다.
-- 운영 진단 기능은 `mcp` 네임스페이스의 MCP 서비스와 연결됩니다.
+- 운영 진단 기능은 `mcp-agent-npu`를 통해 `qwen3-vllm-worker01`, `qwen3-vllm-worker02`와 연계되어 응답을 해석해 제공합니다.
 
 ### Why This Infrastructure Matters
 

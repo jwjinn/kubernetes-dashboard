@@ -18,7 +18,8 @@ This is not just a UI sample. The repository is intended to represent a deployab
 This dashboard is designed for scenarios like these:
 
 - You want to inspect multiple nodes and workloads from a single screen
-- You want quick visibility into GPU or NPU resource usage
+- You want quick visibility into NPU resource usage
+- You want to use the currently completed NPU-focused operational views while GPU support is planned next
 - You want pod-level metrics, logs, events, and describe information in one workflow
 - You want the dashboard to fit an operational environment that already includes Keycloak and observability components
 
@@ -39,7 +40,8 @@ The repository is organized as follows:
   - logs
   - events
   - describe information
-- GPU / NPU visibility and workload mapping
+- NPU visibility and workload mapping
+- GPU-oriented support is planned, while the currently completed operational path is NPU-first
 - Keycloak OIDC login
 - VictoriaMetrics / VictoriaLogs / VictoriaTraces integration
 - Operational diagnosis chat workflow integration
@@ -208,12 +210,15 @@ flowchart LR
 
     TR --> FE
     FE --> BE
+    FE --> KC
     BE --> KC
     KC --> PG
     BE --> VM
     BE --> VLOGS
     BE --> VTRACES
     BE --> MCPAGENT
+    MCPAGENT --> APP1
+    MCPAGENT --> APP2
     OTEL --> VM
     VM --> GRAFANA
 
@@ -239,6 +244,8 @@ The current cluster state includes these main namespaces:
 - `observability`: metrics, logs, traces, OTEL, and Grafana
 - `mcp`: operational helper services for diagnosis workflows
 - `traefik`: ingress controller for public dashboard and Keycloak access
+
+The `npu-dashboard` example in this README is based on a live deployment snapshot from a Rebellions NPU environment.
 
 ## Kubernetes Deployment Guide
 
