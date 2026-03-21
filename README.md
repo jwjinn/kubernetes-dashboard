@@ -1,8 +1,12 @@
 # Kubernetes AI Infrastructure Dashboard
 
+[EN](./README.en.md)
+
 <a href="https://youtu.be/jrAfJNdNkqc">
   <img src="./wiki/images/images.png" alt="Demo Video" width="640" />
 </a>
+
+이미지를 클릭하면 데모 영상으로 이동합니다.
 
 Kubernetes 기반 AI 인프라를 운영하기 위한 대시보드입니다.  
 클러스터 상태, 워크로드, 가속기 자원, 로그와 트레이스를 하나의 화면에서 확인할 수 있고, Keycloak OIDC 인증을 통해 운영 환경에 맞게 보호된 형태로 배포할 수 있습니다.
@@ -88,37 +92,88 @@ Kubernetes 기반 AI 인프라를 운영하기 위한 대시보드입니다.
 ### Infrastructure Diagram
 
 ```mermaid
-flowchart LR
-    User[User Browser]
-    Traefik[Traefik Ingress<br/>NodePort 32080/32443]
-    Frontend[dashboard-frontend<br/>ClusterIP:80]
-    Nginx[Frontend Nginx Proxy]
-    Backend[dashboard-backend<br/>ClusterIP:8081]
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontSize": "22px",
+    "fontFamily": "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    "primaryColor": "#e8f1ff",
+    "primaryTextColor": "#0f172a",
+    "primaryBorderColor": "#3b82f6",
+    "lineColor": "#475569",
+    "secondaryColor": "#ecfdf5",
+    "tertiaryColor": "#fff7ed",
+    "clusterBkg": "#f8fafc",
+    "clusterBorder": "#cbd5e1"
+  },
+  "flowchart": {
+    "nodeSpacing": 44,
+    "rankSpacing": 70,
+    "curve": "basis",
+    "useMaxWidth": true
+  }
+}}%%
+flowchart TB
+    User([User Browser])
 
-    Keycloak[Keycloak<br/>keycloak namespace]
-    K8sAPI[Kubernetes API]
-    Metrics[VictoriaMetrics<br/>vmselect-vm:8481]
-    Logs[VictoriaLogs<br/>victoria-logs-single-server:9428]
-    Traces[VictoriaTraces<br/>vtselect:10471]
-    MCP[MCP Agent NPU<br/>mcp-agent-npu]
+    subgraph ENTRY[Public Entry]
+        Traefik[Traefik Ingress<br/>NodePort 32080 / 32443]
+    end
 
-    User --> Traefik
-    Traefik --> Frontend
-    Frontend --> Nginx
-    Nginx --> Backend
+    subgraph DASH[Dashboard Namespace]
+        Frontend[dashboard-frontend<br/>ClusterIP :80]
+        Nginx[Frontend Nginx<br/>Static + API Proxy]
+        Backend[dashboard-backend<br/>ClusterIP :8081]
+    end
 
-    Backend --> K8sAPI
+    subgraph PLATFORM[Platform Services]
+        Keycloak[Keycloak<br/>OIDC Identity]
+        K8sAPI[Kubernetes API]
+        Metrics[VictoriaMetrics<br/>vmselect-vm :8481]
+        Logs[VictoriaLogs<br/>:9428]
+        Traces[VictoriaTraces<br/>vtselect :10471]
+        MCP[MCP Agent NPU]
+    end
+
+    User --> Traefik --> Frontend --> Nginx --> Backend
+
     Backend --> Keycloak
+    Backend --> K8sAPI
     Backend --> Metrics
     Backend --> Logs
     Backend --> Traces
     Backend --> MCP
+
+    classDef entry fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
+    classDef dash fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#111827;
+    classDef platform fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#111827;
+
+    class Traefik entry;
+    class Frontend,Nginx,Backend dash;
+    class Keycloak,K8sAPI,Metrics,Logs,Traces,MCP platform;
 ```
 
 ### Namespace Layout
 
 ```mermaid
-flowchart TB
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontSize": "20px",
+    "fontFamily": "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    "primaryTextColor": "#0f172a",
+    "lineColor": "#64748b",
+    "clusterBkg": "#ffffff",
+    "clusterBorder": "#cbd5e1"
+  },
+  "flowchart": {
+    "nodeSpacing": 36,
+    "rankSpacing": 62,
+    "curve": "basis",
+    "useMaxWidth": true
+  }
+}}%%
+flowchart LR
     subgraph NS1[npu-dashboard]
         FE[dashboard-frontend]
         BE[dashboard-backend]
@@ -134,9 +189,9 @@ flowchart TB
     subgraph NS3[observability]
         OTEL[otel-collector]
         VM[vmselect-vm]
-        VLOGS[victoria-logs-single-server]
-        VTRACES[victoria-traces-vtselect]
-        GRAFANA[vm-grafana]
+        VLOGS[victoria-logs]
+        VTRACES[victoria-traces]
+        GRAFANA[grafana]
     end
 
     subgraph NS4[mcp]
@@ -151,13 +206,28 @@ flowchart TB
         TR[traefik]
     end
 
+    TR --> FE
     FE --> BE
     BE --> KC
+    KC --> PG
     BE --> VM
     BE --> VLOGS
     BE --> VTRACES
     BE --> MCPAGENT
-    TR --> FE
+    OTEL --> VM
+    VM --> GRAFANA
+
+    classDef dash fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#111827;
+    classDef auth fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#111827;
+    classDef obs fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#111827;
+    classDef mcp fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#111827;
+    classDef edge fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#111827;
+
+    class FE,BE,APP1,APP2 dash;
+    class KC,PG auth;
+    class OTEL,VM,VLOGS,VTRACES,GRAFANA obs;
+    class MCPAGENT,MCPK8S,MCPVM,MCPVLOGS,MCPVTRACES mcp;
+    class TR edge;
 ```
 
 ### `npu-dashboard` Namespace
@@ -345,16 +415,61 @@ flowchart TB
 대시보드 백엔드는 다음 내부 서비스에 의존합니다.
 
 ```mermaid
-flowchart TD
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontSize": "20px",
+    "fontFamily": "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    "primaryColor": "#eef2ff",
+    "primaryBorderColor": "#4f46e5",
+    "primaryTextColor": "#111827",
+    "lineColor": "#64748b",
+    "clusterBkg": "#f8fafc",
+    "clusterBorder": "#cbd5e1"
+  },
+  "flowchart": {
+    "nodeSpacing": 34,
+    "rankSpacing": 56,
+    "curve": "basis",
+    "useMaxWidth": true
+  }
+}}%%
+flowchart TB
     BE[dashboard-backend]
 
-    BE --> KC[keycloak.keycloak.svc.cluster.local:8080]
-    BE --> METRICS[vmselect-vm.observability.svc.cluster.local:8481]
-    BE --> LOGS[victoria-logs-single-server.observability.svc.cluster.local:9428]
-    BE --> TRACES[victoria-traces-vtc-vtselect.observability.svc.cluster.local:10471]
-    BE --> OTEL[otel-collector-collector.observability.svc.cluster.local:4318]
-    BE --> MCP[mcp-agent-npu.mcp.svc.cluster.local]
-    BE --> K8S[Kubernetes API]
+    subgraph AUTH[Authentication]
+        KC[keycloak.keycloak.svc.cluster.local:8080]
+    end
+
+    subgraph OBS[Observability]
+        METRICS[vmselect-vm.observability.svc.cluster.local:8481]
+        LOGS[victoria-logs-single-server.observability.svc.cluster.local:9428]
+        TRACES[victoria-traces-vtc-vtselect.observability.svc.cluster.local:10471]
+        OTEL[otel-collector-collector.observability.svc.cluster.local:4318]
+    end
+
+    subgraph OPS[Operations]
+        MCP[mcp-agent-npu.mcp.svc.cluster.local]
+        K8S[Kubernetes API]
+    end
+
+    BE --> KC
+    BE --> METRICS
+    BE --> LOGS
+    BE --> TRACES
+    BE --> OTEL
+    BE --> MCP
+    BE --> K8S
+
+    classDef core fill:#eef2ff,stroke:#4f46e5,stroke-width:2px,color:#111827;
+    classDef auth fill:#fff7ed,stroke:#ea580c,stroke-width:2px,color:#111827;
+    classDef obs fill:#ecfeff,stroke:#0891b2,stroke-width:2px,color:#111827;
+    classDef ops fill:#f0fdf4,stroke:#16a34a,stroke-width:2px,color:#111827;
+
+    class BE core;
+    class KC auth;
+    class METRICS,LOGS,TRACES,OTEL obs;
+    class MCP,K8S ops;
 ```
 
 ### Deployment Notes
