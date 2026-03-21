@@ -6,7 +6,7 @@
   <img src="./wiki/images/images.png" alt="Demo Video" width="640" />
 </a>
 
-이미지를 클릭하면 데모 영상으로 이동합니다.
+> Demo video: click the image above to open the YouTube walkthrough.
 
 Kubernetes 기반 AI 인프라를 운영하기 위한 대시보드입니다.  
 클러스터 상태, 워크로드, 가속기 자원, 로그와 트레이스를 하나의 화면에서 확인할 수 있고, Keycloak OIDC 인증을 통해 운영 환경에 맞게 보호된 형태로 배포할 수 있습니다.

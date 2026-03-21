@@ -6,7 +6,7 @@
   <img src="./wiki/images/images.png" alt="Demo Video" width="640" />
 </a>
 
-Click the image above to open the demo video.
+> Demo video: click the image above to open the YouTube walkthrough.
 
 This project is an operational dashboard for AI infrastructure running on Kubernetes.  
 It brings cluster state, workloads, accelerator usage, logs, and traces into one place, and it is designed to be deployed in a protected production-like environment with Keycloak OIDC authentication.
