@@ -1,13 +1,18 @@
+# Public HTTPS entrypoint for the dashboard UI.
+# Traefik terminates TLS and forwards requests to the internal frontend service.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: dashboard
   namespace: npu-dashboard
 spec:
+  # Adjust this if your cluster uses a different ingress controller.
   ingressClassName: traefik
   tls:
     - hosts:
+        # Public hostname users access in the browser.
         - dashboard.home.arpa
+      # Pre-created TLS secret expected in the same namespace.
       secretName: dashboard-tls
   rules:
     - host: dashboard.home.arpa
@@ -17,6 +22,8 @@ spec:
             pathType: Prefix
             backend:
               service:
+                # Route everything to the frontend. The frontend then serves static
+                # assets or proxies /api/* to the backend service.
                 name: dashboard-frontend
                 port:
                   number: 80

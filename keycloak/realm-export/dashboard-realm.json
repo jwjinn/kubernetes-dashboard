@@ -19,11 +19,13 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "redirectUris": [
+        "https://dashboard.home.arpa:32443/*",
         "http://192.168.160.180:*/*",
         "http://192.168.160.59:*/*",
         "http://192.168.160.69:*/*"
       ],
       "webOrigins": [
+        "https://dashboard.home.arpa:32443",
         "http://192.168.160.180:*",
         "http://192.168.160.59:*",
         "http://192.168.160.69:*"

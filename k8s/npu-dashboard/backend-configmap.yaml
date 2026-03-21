@@ -1,24 +1,55 @@
+# Backend runtime configuration.
+# Most environment-specific integration points are centralized here so that the
+# backend image can stay unchanged across environments.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dashboard-backend-config
   namespace: npu-dashboard
 data:
+  # HTTP listen port inside the container.
   PORT: "8081"
+
+  # Protect /api/* endpoints with bearer-token validation when true.
+  # Set to false only for controlled local/dev scenarios.
   AUTH_ENABLED: "true"
+
+  # Allowed browser origin for CORS.
+  # This should match the public dashboard URL exposed through ingress.
   FRONTEND_ORIGIN: "https://dashboard.home.arpa:32443"
+
+  # Public issuer URL embedded in tokens and used by the browser-facing OIDC flow.
+  # This must remain the externally visible HTTPS address.
   OIDC_ISSUER_URL: "https://keycloak.home.arpa:32443/realms/dashboard-realm"
+
+  # Internal discovery endpoint used by pods.
+  # We keep this separate from OIDC_ISSUER_URL because pods do not necessarily
+  # have access to the same DNS/CA setup as end-user browsers.
   OIDC_DISCOVERY_URL: "http://keycloak.keycloak.svc.cluster.local:8080/realms/dashboard-realm"
+
+  # Internal JWKS endpoint for public key retrieval during token validation.
   OIDC_JWKS_URL: "http://keycloak.keycloak.svc.cluster.local:8080/realms/dashboard-realm/protocol/openid-connect/certs"
+
+  # Intended audience/client identifier of the access token.
   OIDC_AUDIENCE: "dashboard-client"
+
+  # Informer resync period for Kubernetes cache refresh.
   KUBERNETES_CACHE_RESYNC: "10m"
+
+  # Cache TTLs for API responses that do not need to hit upstream systems on every request.
   SUMMARY_CACHE_TTL: "10s"
   TOPOLOGY_CACHE_TTL: "15s"
+
+  # Optional MCP agent integration used by diagnosis/chat workflows.
   MCP_AGENT_BASE_URL: "http://mcp-agent-npu.mcp.svc.cluster.local"
   DIAGNOSIS_CHAT_TIMEOUT: "240s"
+
+  # Observability backends used by the dashboard.
+  # These should point at cluster-internal services for stability and lower latency.
   LOGS_BASE_URL: "http://victoria-logs-single-server.observability.svc.cluster.local:9428"
   TRACES_BASE_URL: "http://victoria-traces-vtc-vtselect.observability.svc.cluster.local:10471"
   METRICS_BASE_URL: "http://vmselect-vm.observability.svc.cluster.local:8481"
+
   # Node Dashboard metric source settings.
   # NODE_METRICS_JOB:
   #   Prometheus/VictoriaMetrics job label used for node-level metrics.
@@ -42,5 +73,7 @@ data:
   #   kube-state-metrics metric used for pod -> node mapping.
   #   Usually kube_pod_info unless your environment exposes a different metric.
   NODE_METRICS_POD_INFO_METRIC: "kube_pod_info"
+
+  # OTEL exporter settings for backend-emitted traces/telemetry.
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-collector.observability.svc.cluster.local:4318"
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"

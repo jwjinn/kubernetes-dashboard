@@ -1,27 +1,38 @@
+# ServiceAccount used by the backend pod when talking to the Kubernetes API.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: dashboard-backend
   namespace: npu-dashboard
 ---
+# ClusterRole grants read access across cluster-scoped and namespaced resources
+# needed by the dashboard, plus pod deletion for controlled terminate actions.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: dashboard-backend
 rules:
+  # Core resources used for cluster/pod/service/event views.
   - apiGroups: [""]
     resources: ["nodes", "pods", "pods/log", "namespaces", "events", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
+
+  # Workload controllers shown by the dashboard.
   - apiGroups: ["apps"]
     resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
     verbs: ["get", "list", "watch"]
+
+  # Batch resources shown in workload-level views.
   - apiGroups: ["batch"]
     resources: ["jobs", "cronjobs"]
     verbs: ["get", "list", "watch"]
+
+  # Required for user-triggered pod termination actions from the dashboard.
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["delete"]
 ---
+# Bind the ClusterRole to the backend ServiceAccount.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

@@ -1,9 +1,13 @@
+# Backend deployment and service.
+# The backend is the integration hub: Kubernetes API access, OIDC validation,
+# metrics/logs/traces queries, and diagnostic workflow endpoints all live here.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dashboard-backend
   namespace: npu-dashboard
 spec:
+  # Single replica is enough for the current environment.
   replicas: 1
   revisionHistoryLimit: 2
   selector:
@@ -14,30 +18,37 @@ spec:
       labels:
         app: dashboard-backend
     spec:
+      # This ServiceAccount is bound to a ClusterRole in rbac.yaml.
       serviceAccountName: dashboard-backend
       containers:
         - name: backend
+          # Replace with a pinned sha-* tag in production for predictable rollouts.
           image: ghcr.io/jwjinn/kubernetes-dashboard-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8081
               name: http
           envFrom:
+            # All runtime integration endpoints and behavior toggles come from ConfigMap.
             - configMapRef:
                 name: dashboard-backend-config
           readinessProbe:
+            # Health endpoint used once the server is able to serve traffic.
             httpGet:
               path: /healthz
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
+            # Detect hung/crashed backend process.
             httpGet:
               path: /healthz
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
           resources:
+            # Slightly larger budget than the frontend because this service performs
+            # API fan-out, auth verification, and observability queries.
             requests:
               cpu: 100m
               memory: 128Mi
@@ -45,12 +56,14 @@ spec:
               cpu: 500m
               memory: 512Mi
 ---
+# Private backend service consumed by the frontend Nginx proxy.
 apiVersion: v1
 kind: Service
 metadata:
   name: dashboard-backend
   namespace: npu-dashboard
 spec:
+  # Keep backend traffic inside the cluster.
   type: ClusterIP
   selector:
     app: dashboard-backend

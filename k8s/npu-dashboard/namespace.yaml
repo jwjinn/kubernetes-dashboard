@@ -1,3 +1,5 @@
+# All dashboard-related resources are isolated into a dedicated namespace.
+# This makes it easier to operate, inspect, and delete the full stack as one unit.
 apiVersion: v1
 kind: Namespace
 metadata:

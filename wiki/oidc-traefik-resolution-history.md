@@ -12,6 +12,15 @@
 - 왜 Keycloak reverse proxy 설정과 client redirect URI 설정이 중요한지
 - 어떤 Kubernetes YAML과 어떤 코드가 바뀌었는지
 
+## TL;DR
+
+이 문서를 한 줄로 요약하면 아래와 같다.
+
+- `NodePort + HTTP + IP` 구조는 OIDC PKCE 로그인에 적합하지 않았다
+- 그래서 `Traefik Ingress + HTTPS + host 기반 접근`으로 바꿨다
+- frontend는 외부 HTTPS issuer를 보고, backend는 내부 Service DNS 기반 discovery를 보도록 분리했다
+- 그 결과 브라우저 로그인과 backend 토큰 검증을 동시에 안정화할 수 있었다
+
 ## 1. 최종 목표
 
 최종적으로 원하는 구조는 아래와 같았다.
@@ -184,6 +193,8 @@ HTTPS 전환 후 dashboard 로그인 시 다음 에러가 발생했다.
 
 를 `dashboard-client` 설정에 추가했다.
 
+이 설정은 현재 `keycloak/realm-export/dashboard-realm.json`에도 반영되어 있어야 한다.
+
 ## 6. frontend OIDC 설정 문제
 
 Keycloak HTTPS 전환 후에도 dashboard 로그인 시 아래 문제가 있었다.
@@ -252,6 +263,8 @@ backend가 다음 주소를 직접 조회하려 하면서 실패했다.
 - issuer 검증은 외부 HTTPS 주소 기준으로 수행
 
 하도록 만들었다.
+
+이 결정은 현재 dashboard 배포 매니페스트의 핵심 운영 원칙 중 하나다.
 
 ### 적용 코드
 

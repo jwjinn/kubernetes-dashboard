@@ -1,10 +1,17 @@
+# Frontend deployment and service.
+# The frontend is intentionally internal-only (ClusterIP) and is exposed
+# externally through Traefik Ingress instead of a direct NodePort/LoadBalancer.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dashboard-frontend
   namespace: npu-dashboard
 spec:
+  # Single replica is enough for the current lab/development environment.
+  # Increase replicas for HA if needed.
   replicas: 1
+
+  # Keep a small rollback history to reduce ReplicaSet clutter.
   revisionHistoryLimit: 2
   selector:
     matchLabels:
@@ -16,31 +23,39 @@ spec:
     spec:
       containers:
         - name: frontend
+          # Replace with a pinned sha-* tag in production if you want reproducible rollouts.
           image: ghcr.io/jwjinn/kubernetes-dashboard-frontend:latest
+
+          # Always pull when using mutable tags like :latest.
           imagePullPolicy: Always
           ports:
             - containerPort: 80
               name: http
           volumeMounts:
+            # Runtime environment values loaded by the React app.
             - name: runtime-config
               mountPath: /usr/share/nginx/html/env-config.js
               subPath: env-config.js
+            # Custom Nginx config that enables /api proxying and SPA route fallback.
             - name: nginx-config
               mountPath: /etc/nginx/conf.d/default.conf
               subPath: default.conf
           readinessProbe:
+            # The container is ready once the web root responds successfully.
             httpGet:
               path: /
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
+            # Basic liveness check for the static frontend server.
             httpGet:
               path: /
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
           resources:
+            # Conservative defaults suitable for a lightweight Nginx + static frontend container.
             requests:
               cpu: 50m
               memory: 64Mi
@@ -55,12 +70,14 @@ spec:
           configMap:
             name: dashboard-frontend-nginx
 ---
+# Internal frontend service targeted by the dashboard ingress.
 apiVersion: v1
 kind: Service
 metadata:
   name: dashboard-frontend
   namespace: npu-dashboard
 spec:
+  # External exposure is handled by Ingress, so keep this private.
   type: ClusterIP
   selector:
     app: dashboard-frontend

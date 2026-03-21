@@ -1,6 +1,21 @@
+# Kustomize entrypoint for the dashboard deployment.
+# Apply everything with:
+#   kubectl apply -k k8s/npu-dashboard
+# Delete everything with:
+#   kubectl delete -k k8s/npu-dashboard
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+# Force generated/applied resources into the same namespace unless a manifest
+# explicitly overrides it. This keeps the deployment self-contained.
 namespace: npu-dashboard
+
+# Resource order matters conceptually even if Kubernetes reconciles asynchronously:
+# 1. namespace
+# 2. config
+# 3. rbac
+# 4. workloads
+# 5. ingress
 resources:
   - namespace.yaml
   - frontend-configmap.yaml

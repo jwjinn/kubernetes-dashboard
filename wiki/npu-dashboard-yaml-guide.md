@@ -1,5 +1,17 @@
 # NPU Dashboard YAML 구성 설명
 
+## 이 문서를 어떻게 읽으면 좋은가
+
+이 문서는 "배포 YAML이 왜 이렇게 생겼는지"를 설명하는 문서다.
+
+추천 읽기 순서는 아래와 같다.
+
+1. 전체 구조 요약
+2. `frontend-configmap.yaml`, `backend-configmap.yaml`
+3. `frontend.yaml`, `backend.yaml`
+4. `dashboard-ingress.yaml`
+5. `rbac.yaml`
+
 이 문서는 `k8s/npu-dashboard` 디렉토리에 있는 Kubernetes YAML 파일들이 각각 어떤 역할을 하는지, 왜 필요한지, 서로 어떻게 연결되는지를 설명한다.
 
 ## 전체 구조 요약
@@ -26,6 +38,8 @@
 ```
 
 ## 파일별 설명
+
+이 섹션은 "파일 하나를 열었을 때 무엇을 봐야 하는가"에 초점을 맞춘다.
 
 ### `namespace.yaml`
 
@@ -81,6 +95,7 @@
 
 - Keycloak 주소가 바뀔 수 있는데 코드에 하드코딩하면 이미지 재빌드가 필요하다.
 - 지금 목표가 ConfigMap으로 인자를 받아 배포되는 구조이기 때문에 필수다.
+- 환경이 달라져도 프론트 이미지는 유지하고 설정만 교체할 수 있다.
 
 #### 2. `dashboard-frontend-nginx`
 
@@ -99,6 +114,7 @@
 
 - 이번 구조에서는 backend를 외부로 노출하지 않기로 했기 때문
 - 프론트만 `NodePort`로 노출하고도 API 호출이 가능하게 하려면 이 프록시 구성이 필요하다
+- 브라우저 기준에서는 same-origin 흐름이 유지되어 CORS 복잡도가 줄어든다
 
 ### `frontend.yaml`
 
@@ -116,6 +132,7 @@
 
 - 프론트는 사용자가 접속하는 진입점이다.
 - 단순 정적 파일 서빙이 아니라, runtime config와 backend proxy가 같이 붙어 있어야 한다.
+- Ingress 뒤에서 안정적으로 라우팅되는 기본 웹 엔드포인트 역할을 한다.
 
 #### Service
 
@@ -155,6 +172,7 @@
 - 이 주소들을 코드 하드코딩으로 고정하면 환경이 바뀔 때 유지보수가 어려워진다.
 - informer와 TTL cache 시간도 운영 중 조정 가능해야 한다.
 - OIDC에서는 외부 issuer와 내부 discovery 주소를 분리해 reverse proxy 환경을 안정적으로 처리해야 한다.
+- metrics / logs / traces / MCP endpoint가 모두 여기에 모여 있어 운영 변경 지점을 한 곳에서 관리할 수 있다.
 
 ### `backend.yaml`
 
@@ -173,6 +191,7 @@
 
 - 백엔드는 Kubernetes API, observability 시스템, Keycloak 검증을 담당하는 핵심 계층이다.
 - 프론트가 직접 여러 시스템에 붙지 않고 백엔드를 통해서만 데이터에 접근하게 만들기 위해 필요하다.
+- 인증, 권한, API fan-out, 캐시 전략을 한 계층에 집중시키기 위한 구조다.
 
 #### Service
 
@@ -200,6 +219,7 @@
 - OIDC PKCE는 브라우저의 secure context를 필요로 한다.
 - 초기 `NodePort + HTTP + IP` 구조에서는 `crypto.subtle` 사용이 막혀 로그인이 실패했다.
 - Traefik Ingress와 TLS를 통해 `https://dashboard.home.arpa:32443` 접속 경로를 제공해야 브라우저가 secure context로 인식한다.
+- frontend를 `ClusterIP`로 유지하면서도 외부 공개 주소를 일관되게 관리할 수 있다.
 
 ### `rbac.yaml`
 
@@ -228,6 +248,7 @@
 - 클러스터 내부에서 돌아가는 파드라고 해서 자동으로 Kubernetes API를 읽을 수 있는 것은 아니다.
 - 현재 백엔드는 node/pod 상태 조회와 pod terminate 기능을 제공하므로 이 권한이 필요하다.
 - namespace 범위를 전체로 가져가기로 했기 때문에 `ClusterRole`로 구성했다.
+- 나중에 기능이 늘어나면 가장 먼저 검토해야 할 보안 파일도 이 파일이다.
 
 ## 파일들이 함께 만드는 동작 흐름
 
@@ -258,6 +279,12 @@
 즉, 이 구성은 단순한 테스트용이 아니라 현재 원하는 운영 방향을 그대로 옮긴 1차 배포 형태라고 보면 된다.
 
 ## 배포 전에 특히 확인할 포인트
+
+실제 배포 전에는 아래 세 가지만 먼저 체크해도 많은 문제를 줄일 수 있다.
+
+- Ingress host / TLS secret / DNS가 맞는지
+- Keycloak redirect URI / web origin / issuer 주소가 맞는지
+- observability Service DNS와 포트가 현재 클러스터와 맞는지
 
 - frontend 이미지가 ConfigMap 기반 OIDC 런타임 설정 변경을 포함하고 있는지
 - backend 이미지가 informer/cache 변경을 포함하고 있는지

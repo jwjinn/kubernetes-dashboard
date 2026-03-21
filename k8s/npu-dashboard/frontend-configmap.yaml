@@ -1,18 +1,32 @@
+# Frontend runtime settings are injected at deploy time rather than baked into
+# the image. This lets the same image be reused across environments.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dashboard-frontend-runtime
   namespace: npu-dashboard
 data:
+  # This file is mounted into the Nginx-served frontend as /usr/share/nginx/html/env-config.js.
+  # The React app reads these values from window._env_ at runtime.
   env-config.js: |
     window._env_ = {
+      // Public Keycloak realm URL used by the browser for OIDC login.
+      // This must be the externally reachable HTTPS address, not an internal service DNS.
       VITE_OIDC_AUTHORITY: "https://keycloak.home.arpa:32443/realms/dashboard-realm",
+      // OIDC client registered in Keycloak.
       VITE_OIDC_CLIENT_ID: "dashboard-client",
+      // Path inside the frontend app to land on after successful login.
       VITE_OIDC_REDIRECT_PATH: "/dashboard",
+      // Path inside the frontend app to land on after logout.
       VITE_OIDC_POST_LOGOUT_REDIRECT_PATH: "/login",
+      // Accelerator mode toggles GPU/NPU-oriented screens and labels in the UI.
       VITE_ACCELERATOR_TYPE: "NPU"
     };
 ---
+# Frontend Nginx configuration.
+# The dashboard frontend serves static assets, but it also proxies /api/*
+# requests to the backend service so the browser never talks directly to a
+# private ClusterIP service.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -27,6 +41,8 @@ data:
       root /usr/share/nginx/html;
       index index.html index.htm;
 
+      # Proxy all API traffic to the backend service inside the cluster.
+      # This keeps the backend private while preserving a same-origin browser flow.
       location /api/ {
         proxy_pass http://dashboard-backend.npu-dashboard.svc.cluster.local:8081;
         proxy_http_version 1.1;
@@ -40,6 +56,8 @@ data:
         proxy_set_header X-Forwarded-Proto $scheme;
       }
 
+      # SPA fallback: React Router handles routes client-side, so unknown paths
+      # should resolve to index.html instead of returning 404 from Nginx.
       location / {
         try_files $uri $uri/ /index.html;
       }

@@ -1,5 +1,22 @@
 # NPU Dashboard 배포 메모
 
+## 한눈에 보기
+
+이 문서는 실제 배포 작업을 수행할 때 보는 운영 메모다.
+
+가장 중요한 원칙은 아래 4가지다.
+
+- frontend는 `Traefik Ingress + HTTPS` 뒤에서 서비스한다
+- backend는 외부에 직접 노출하지 않고 `ClusterIP`로만 운영한다
+- 인증은 Keycloak OIDC를 사용한다
+- metrics / logs / traces는 클러스터 내부 Service DNS로 조회한다
+
+처음 배포할 때 가장 먼저 확인할 파일은 아래 3개다.
+
+- `k8s/npu-dashboard/frontend-configmap.yaml`
+- `k8s/npu-dashboard/backend-configmap.yaml`
+- `k8s/npu-dashboard/dashboard-ingress.yaml`
+
 ## 배포 모델
 
 - Namespace: `npu-dashboard`
@@ -98,6 +115,8 @@ OIDC 관련해서는 브라우저/토큰 기준 issuer와 backend 내부 discove
 
 ## 실제 배포 명령 순서
 
+이 순서는 "처음 배포하는 사람" 기준으로 가장 안전한 흐름이다.
+
 ### 1. 저장소 최신 상태 확인
 
 ```bash
@@ -193,6 +212,14 @@ https://dashboard.home.arpa:32443
 - 화면에서 API 호출 에러가 없는지
 - 브라우저 mixed content 에러가 없는지
 
+## 배포 후 빠른 판단 기준
+
+아래 세 가지가 모두 통과하면 배포는 대체로 정상이라고 볼 수 있다.
+
+1. `dashboard-frontend`, `dashboard-backend` Pod가 모두 `Running`
+2. `https://dashboard.home.arpa:32443` 접속 후 Keycloak 로그인 성공
+3. 로그인 후 첫 화면에서 `/api/clusters/summary` 호출 성공
+
 ## 개별 적용이 필요할 때
 
 전체 적용 대신 개별 파일 단위로도 배포할 수 있다.
@@ -241,3 +268,9 @@ kubectl rollout status deploy/dashboard-frontend -n npu-dashboard
 
 현재 매니페스트는 `latest` 태그를 사용할 때 노드 캐시 문제를 피하기 위해 `imagePullPolicy: Always`를 사용한다.  
 운영 단계에서는 `latest` 대신 새 `sha-*` 태그로 고정하는 방식이 가장 안전하다.
+
+## 함께 보면 좋은 문서
+
+- `README.md`: 프로젝트 소개와 현재 인프라 개요
+- `wiki/npu-dashboard-yaml-guide.md`: 각 YAML 파일이 왜 필요한지 설명
+- `wiki/oidc-traefik-resolution-history.md`: OIDC / HTTPS 전환 배경과 문제 해결 과정
