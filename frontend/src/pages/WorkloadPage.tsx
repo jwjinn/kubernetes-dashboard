@@ -24,9 +24,11 @@ type NodeStatusMap = Record<string, DiagnosisNodeStatus | string>;
 type NodeErrorMap = Record<string, string | undefined>;
 
 const starterPrompts = [
-    '현재 NPU inference 환경 전반 상태를 진단해줘',
-    '최근 장애 징후가 있는 파드와 원인을 정리해줘',
-    'VictoriaLogs와 Kubernetes 이벤트를 기준으로 위험 신호를 찾아줘',
+    '클러스터의 네임스페이스 목록을 보여줘',
+    '특정 파드의 최근 1시간 로그를 보여줘',
+    'CPU 사용량이 높은 파드를 보여줘',
+    '현재 클러스터 상태를 진단해줘',
+    '최근 1시간 이상 징후를 보여줘',
 ];
 
 const streamingPlaceholderText = '응답을 스트리밍으로 받아오는 중입니다...';
@@ -383,7 +385,7 @@ export default function WorkloadPage() {
                         <div>
                             <p className="text-sm font-bold text-foreground">추천 질문</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                자주 쓰는 진단 프롬프트를 바로 보낼 수 있습니다.
+                                자주 쓰는 운영 질문을 바로 보낼 수 있습니다.
                             </p>
                         </div>
 
@@ -403,7 +405,7 @@ export default function WorkloadPage() {
                         <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
                             <p className="font-semibold text-foreground">안내</p>
                             <p className="mt-2 leading-5">
-                                답변은 백엔드 프록시를 통해 MCP agent pod로 전달됩니다. 질의 내용에 따라 Kubernetes 상태, 로그, 메트릭 결과를 종합해 서술형으로 응답합니다.
+                                답변은 백엔드 프록시를 통해 MCP agent pod로 전달됩니다. 질의 내용에 따라 Kubernetes 상태, 로그, 메트릭 결과를 조회해 응답합니다.
                             </p>
                         </div>
                     </div>
@@ -506,7 +508,7 @@ export default function WorkloadPage() {
                                 <Textarea
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
-                                    placeholder="예: 현재 NPU inference 환경 전반 상태를 진단해줘"
+                                    placeholder="예: 현재 클러스터 상태를 진단해줘"
                                     className="min-h-[96px] resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
