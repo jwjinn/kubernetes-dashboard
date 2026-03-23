@@ -92,7 +92,8 @@ export interface DeviceMetricSeries {
     node: string;
     uuid: string;
     label: string;
-    values: number[];
+    avgValues: number[];
+    maxValues: number[];
 }
 
 export interface NpuDeviceHistoryResponse {

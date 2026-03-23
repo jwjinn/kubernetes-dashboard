@@ -45,11 +45,12 @@ type acceleratorTrendItem struct {
 }
 
 type deviceMetricSeries struct {
-	DeviceID string    `json:"deviceId"`
-	Node     string    `json:"node"`
-	UUID     string    `json:"uuid"`
-	Label    string    `json:"label"`
-	Values   []float64 `json:"values"`
+	DeviceID  string    `json:"deviceId"`
+	Node      string    `json:"node"`
+	UUID      string    `json:"uuid"`
+	Label     string    `json:"label"`
+	AvgValues []float64 `json:"avgValues"`
+	MaxValues []float64 `json:"maxValues"`
 }
 
 type npuClusterOverview struct {
@@ -529,10 +530,11 @@ func (a *app) loadNPUDeviceHistory(ctx context.Context) (*npuDeviceHistoryRespon
 			return nil, err
 		}
 
-		end := time.Now().Truncate(2 * time.Hour)
-		start := end.Add(-7 * 24 * time.Hour)
-		step := 2 * time.Hour
-		timeAxis := buildNPUHistoryTimeAxis(start, end, step)
+		now := time.Now()
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -6)
+		end := now
+		step := 1 * time.Hour
+		timeAxis := buildNPUHistoryTimeAxis(start, 7)
 		targetCount := len(timeAxis)
 
 		loadMetric := func(metricName string) []promResult {
@@ -545,10 +547,10 @@ func (a *app) loadNPUDeviceHistory(ctx context.Context) (*npuDeviceHistoryRespon
 
 		return &npuDeviceHistoryResponse{
 			TimeAxis:          timeAxis,
-			UtilSeries:        buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuUtilMetric()), targetCount, func(device acceleratorDevice) float64 { return float64(device.Utilization) }, func(value float64) float64 { return value }, func(base float64) float64 { return 18 }, 0, 100),
-			MemorySeries:      buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuDramUsedMetric()), targetCount, func(device acceleratorDevice) float64 { return parseGiBString(device.VramUsage) }, func(value float64) float64 { return value / 1024 / 1024 / 1024 }, func(base float64) float64 { return maxFloat(base*0.18, 0.8) }, 0, 0),
-			TemperatureSeries: buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuTempMetric()), targetCount, func(device acceleratorDevice) float64 { return float64(device.Temperature) }, func(value float64) float64 { return value }, func(base float64) float64 { return 4 }, 0, 100),
-			PowerSeries:       buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuPowerMetric()), targetCount, func(device acceleratorDevice) float64 { return float64(device.Power) }, func(value float64) float64 { return value }, func(base float64) float64 { return 8 }, 0, 200),
+			UtilSeries:        buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuUtilMetric()), start, targetCount, func(device acceleratorDevice) float64 { return float64(device.Utilization) }, func(value float64) float64 { return value }),
+			MemorySeries:      buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuDramUsedMetric()), start, targetCount, func(device acceleratorDevice) float64 { return parseGiBString(device.VramUsage) }, func(value float64) float64 { return value / 1024 / 1024 / 1024 }),
+			TemperatureSeries: buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuTempMetric()), start, targetCount, func(device acceleratorDevice) float64 { return float64(device.Temperature) }, func(value float64) float64 { return value }),
+			PowerSeries:       buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuPowerMetric()), start, targetCount, func(device acceleratorDevice) float64 { return float64(device.Power) }, func(value float64) float64 { return value }),
 		}, nil
 	})
 	if err != nil {
@@ -656,26 +658,22 @@ func mergeNPUStateMeta(current, candidate npuDeviceState) npuDeviceState {
 func buildDeviceMetricSeries(
 	devices []acceleratorDevice,
 	results []promResult,
+	start time.Time,
 	targetCount int,
 	fallbackValue func(acceleratorDevice) float64,
 	transform func(float64) float64,
-	variation func(float64) float64,
-	minValue float64,
-	maxValue float64,
 ) []deviceMetricSeries {
 	series := make([]deviceMetricSeries, 0, len(devices))
 	for _, device := range devices {
 		base := fallbackValue(device)
-		values := compressPromFloatHistory(results, device.UUID, targetCount, base, transform)
-		if len(values) == 0 {
-			values = syntheticFloatHistory(device.UUID, base, targetCount, variation(base), minValue, maxValue)
-		}
+		avgValues, maxValues := aggregatePromDailyFloatHistory(results, device.UUID, start, targetCount, base, transform)
 		series = append(series, deviceMetricSeries{
-			DeviceID: device.ID,
-			Node:     device.Node,
-			UUID:     device.UUID,
-			Label:    fmt.Sprintf("%s / %s", device.Node, device.ID),
-			Values:   values,
+			DeviceID:  device.ID,
+			Node:      device.Node,
+			UUID:      device.UUID,
+			Label:     fmt.Sprintf("%s / %s", device.Node, device.ID),
+			AvgValues: avgValues,
+			MaxValues: maxValues,
 		})
 	}
 	return series
@@ -719,8 +717,8 @@ func compressPromHistory(results []promResult, uuid string, targetCount, fallbac
 	return history
 }
 
-func compressPromFloatHistory(results []promResult, uuid string, targetCount int, fallback float64, transform func(float64) float64) []float64 {
-	var values []float64
+func aggregatePromDailyFloatHistory(results []promResult, uuid string, start time.Time, targetCount int, fallback float64, transform func(float64) float64) ([]float64, []float64) {
+	byDay := make(map[string][]float64, targetCount)
 	for _, result := range results {
 		if result.Metric["uuid"] != uuid {
 			continue
@@ -729,31 +727,35 @@ func compressPromFloatHistory(results []promResult, uuid string, targetCount int
 			if len(pair) != 2 {
 				continue
 			}
-			values = append(values, transform(float64FromAny(pair[1])))
+			ts := time.Unix(int64(float64FromAny(pair[0])), 0).In(start.Location())
+			dayKey := ts.Format("2006-01-02")
+			byDay[dayKey] = append(byDay[dayKey], transform(float64FromAny(pair[1])))
 		}
 	}
 
-	if len(values) == 0 {
-		return nil
-	}
-
-	if len(values) >= targetCount {
-		step := float64(len(values)) / float64(targetCount)
-		history := make([]float64, 0, targetCount)
-		for index := 0; index < targetCount; index++ {
-			history = append(history, roundToOneDecimal(values[int(float64(index)*step)]))
+	avgValues := make([]float64, 0, targetCount)
+	maxValues := make([]float64, 0, targetCount)
+	for index := 0; index < targetCount; index++ {
+		dayKey := start.AddDate(0, 0, index).Format("2006-01-02")
+		values := byDay[dayKey]
+		if len(values) == 0 {
+			avgValues = append(avgValues, roundToOneDecimal(fallback))
+			maxValues = append(maxValues, roundToOneDecimal(fallback))
+			continue
 		}
-		return history
-	}
 
-	history := make([]float64, 0, targetCount)
-	for _, value := range values {
-		history = append(history, roundToOneDecimal(value))
+		total := 0.0
+		maxValue := values[0]
+		for _, value := range values {
+			total += value
+			if value > maxValue {
+				maxValue = value
+			}
+		}
+		avgValues = append(avgValues, roundToOneDecimal(total/float64(len(values))))
+		maxValues = append(maxValues, roundToOneDecimal(maxValue))
 	}
-	for len(history) < targetCount {
-		history = append(history, roundToOneDecimal(fallback))
-	}
-	return history
+	return avgValues, maxValues
 }
 
 func npuDeviceStatus(state npuDeviceState) string {
@@ -841,43 +843,16 @@ func syntheticHistory(seed string, base, count int) []int {
 	return history
 }
 
-func syntheticFloatHistory(seed string, base float64, count int, variation float64, minValue float64, maxValue float64) []float64 {
-	history := make([]float64, 0, count)
-	hash := 0
-	for _, r := range seed {
-		hash += int(r)
-	}
-	for index := 0; index < count; index++ {
-		delta := float64(((hash + index*11) % 21) - 10)
-		value := base + delta*(variation/10)
-		if value < minValue {
-			value = minValue
-		}
-		if maxValue > minValue && value > maxValue {
-			value = maxValue
-		}
-		history = append(history, roundToOneDecimal(value))
-	}
-	return history
-}
-
-func buildNPUHistoryTimeAxis(start, end time.Time, step time.Duration) []string {
+func buildNPUHistoryTimeAxis(start time.Time, count int) []string {
 	timeAxis := make([]string, 0)
-	for current := start; !current.After(end); current = current.Add(step) {
-		timeAxis = append(timeAxis, current.Format("01-02 15:04"))
+	for index := 0; index < count; index++ {
+		timeAxis = append(timeAxis, start.AddDate(0, 0, index).Format("01-02"))
 	}
 	return timeAxis
 }
 
 func roundToOneDecimal(value float64) float64 {
 	return float64(int(value*10+0.5)) / 10
-}
-
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func acceleratorCapacity(resources corev1.ResourceList, mode string) int {

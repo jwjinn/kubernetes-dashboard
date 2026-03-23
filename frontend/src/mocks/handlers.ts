@@ -306,13 +306,12 @@ const STATIC_NPU_TRENDS = generateNpuTrends();
 
 const generateNpuDeviceHistory = () => {
     const end = new Date();
-    end.setMinutes(0, 0, 0);
-    const timeAxis = Array.from({ length: 85 }).map((_, index) => {
-        const point = new Date(end.getTime() - ((84 - index) * 2 * 60 * 60 * 1000));
+    end.setHours(0, 0, 0, 0);
+    const timeAxis = Array.from({ length: 7 }).map((_, index) => {
+        const point = new Date(end.getTime() - ((6 - index) * 24 * 60 * 60 * 1000));
         const month = String(point.getMonth() + 1).padStart(2, '0');
         const date = String(point.getDate()).padStart(2, '0');
-        const hour = String(point.getHours()).padStart(2, '0');
-        return `${month}-${date} ${hour}:00`;
+        return `${month}-${date}`;
     });
 
     const buildSeries = (base: number, spread: number, transform?: (value: number) => number) =>
@@ -321,16 +320,21 @@ const generateNpuDeviceHistory = () => {
             node: device.node,
             uuid: device.uuid,
             label: `${device.node} / ${device.id}`,
-            values: timeAxis.map((_, pointIndex) => {
-                const raw = base + Math.sin((pointIndex + 1) * (deviceIndex + 1) * 0.15) * spread + (deviceIndex % 3) * spread * 0.2;
+            avgValues: timeAxis.map((_, pointIndex) => {
+                const raw = base + Math.sin((pointIndex + 1) * (deviceIndex + 1) * 0.45) * spread + (deviceIndex % 3) * spread * 0.18;
                 const value = transform ? transform(raw) : raw;
+                return Number(value.toFixed(1));
+            }),
+            maxValues: timeAxis.map((_, pointIndex) => {
+                const raw = base + Math.sin((pointIndex + 1) * (deviceIndex + 1) * 0.45) * spread + (deviceIndex % 3) * spread * 0.18;
+                const value = transform ? transform(raw + spread * 0.45) : raw + spread * 0.45;
                 return Number(value.toFixed(1));
             }),
         }));
 
     return {
         timeAxis,
-        utilSeries: buildSeries(25, 18, (value) => Math.max(0, Math.min(100, value))),
+        utilSeries: buildSeries(14, 16, (value) => Math.max(0, Math.min(100, value))),
         memorySeries: buildSeries(4.2, 0.8, (value) => Math.max(0, value)),
         temperatureSeries: buildSeries(38, 6, (value) => Math.max(20, Math.min(95, value))),
         powerSeries: buildSeries(76, 14, (value) => Math.max(0, value)),
