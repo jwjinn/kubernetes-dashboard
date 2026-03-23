@@ -283,7 +283,7 @@ export function NpuDeviceHistoryView() {
                 </Card>
             </div>
 
-            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-stretch">
+            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                     <Card className="p-0 border-border shadow-sm overflow-hidden">
                         <div className="p-2">
