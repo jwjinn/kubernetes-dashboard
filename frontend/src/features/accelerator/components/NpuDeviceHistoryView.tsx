@@ -6,12 +6,24 @@ import { fetchNpuDeviceHistory, type DeviceMetricSeries } from '@/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 
-const historyPalette = ['#10b981', '#059669', '#22c55e', '#16a34a', '#0f766e', '#14b8a6', '#84cc16', '#65a30d'];
+const historyPalette = ['#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F', '#EDC948', '#B07AA1', '#FF9DA7', '#9C755F', '#BAB0AC', '#1F77B4', '#D62728', '#9467BD', '#8C564B', '#17BECF', '#BCBD22'];
+
+function getSeriesLabel(item: DeviceMetricSeries) {
+    return `${item.node} / ${item.deviceId}`;
+}
+
+function withSeriesStyle(series: DeviceMetricSeries[]) {
+    return series.map((item, index) => ({
+        ...item,
+        color: historyPalette[index % historyPalette.length],
+        legendLabel: getSeriesLabel(item),
+    }));
+}
 
 function buildLineChartOption(
     title: string,
     timeAxis: string[],
-    series: DeviceMetricSeries[],
+    series: Array<DeviceMetricSeries & { color: string; legendLabel: string }>,
     yAxisName: string,
     maxValue?: number,
 ) {
@@ -42,7 +54,7 @@ function buildLineChartOption(
         legend: {
             type: 'scroll' as const,
             bottom: 0,
-            data: series.map((item) => item.deviceId),
+            data: series.map((item) => item.legendLabel),
             textStyle: { fontSize: 11 },
         },
         grid: { left: '9%', right: '4%', bottom: '18%', top: '12%', containLabel: true },
@@ -59,7 +71,7 @@ function buildLineChartOption(
             axisLabel: { fontSize: 10 },
         },
         series: series.map((item, index) => ({
-            name: item.deviceId,
+            name: item.legendLabel,
             type: 'line',
             smooth: true,
             showSymbol: true,
@@ -68,8 +80,8 @@ function buildLineChartOption(
                 value,
                 max: item.maxValues[dataIndex] ?? value,
             })),
-            lineStyle: { width: 2.5, color: historyPalette[index % historyPalette.length] },
-            itemStyle: { color: historyPalette[index % historyPalette.length] },
+            lineStyle: { width: 2.5, color: item.color },
+            itemStyle: { color: item.color },
             emphasis: { focus: 'series' as const },
         })),
         title: {
@@ -139,24 +151,39 @@ export function NpuDeviceHistoryView() {
     const visibleTempSeries = applyTopN(tempSeries);
     const visiblePowerSeries = applyTopN(powerSeries);
 
+    const legendSeries = useMemo(() => withSeriesStyle(visibleUtilSeries), [visibleUtilSeries]);
+    const utilChartSeries = legendSeries;
+    const memoryChartSeries = useMemo(() => legendSeries.map((legendItem) => {
+        const match = visibleMemorySeries.find((item) => item.uuid === legendItem.uuid);
+        return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visibleMemorySeries]);
+    const tempChartSeries = useMemo(() => legendSeries.map((legendItem) => {
+        const match = visibleTempSeries.find((item) => item.uuid === legendItem.uuid);
+        return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visibleTempSeries]);
+    const powerChartSeries = useMemo(() => legendSeries.map((legendItem) => {
+        const match = visiblePowerSeries.find((item) => item.uuid === legendItem.uuid);
+        return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visiblePowerSeries]);
+
     const displayedDeviceCount = visibleUtilSeries.length;
     const timePointCount = data?.timeAxis.length || 0;
 
     const utilOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Utilization', data?.timeAxis || [], visibleUtilSeries, '%', 100),
-        [data?.timeAxis, visibleUtilSeries],
+        () => buildLineChartOption('Daily Average Device Utilization', data?.timeAxis || [], utilChartSeries, '%', 100),
+        [data?.timeAxis, utilChartSeries],
     );
     const memoryOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Memory Usage', data?.timeAxis || [], visibleMemorySeries, 'GiB'),
-        [data?.timeAxis, visibleMemorySeries],
+        () => buildLineChartOption('Daily Average Device Memory Usage', data?.timeAxis || [], memoryChartSeries, 'GiB'),
+        [data?.timeAxis, memoryChartSeries],
     );
     const tempOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Temperature', data?.timeAxis || [], visibleTempSeries, 'C', 100),
-        [data?.timeAxis, visibleTempSeries],
+        () => buildLineChartOption('Daily Average Device Temperature', data?.timeAxis || [], tempChartSeries, 'C', 100),
+        [data?.timeAxis, tempChartSeries],
     );
     const powerOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Power', data?.timeAxis || [], visiblePowerSeries, 'W'),
-        [data?.timeAxis, visiblePowerSeries],
+        () => buildLineChartOption('Daily Average Device Power', data?.timeAxis || [], powerChartSeries, 'W'),
+        [data?.timeAxis, powerChartSeries],
     );
 
     return (
@@ -240,7 +267,8 @@ export function NpuDeviceHistoryView() {
                 </Card>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_280px] gap-6 items-start">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <Card className="p-0 border-border shadow-sm overflow-hidden">
                     <div className="p-2">
                         {isLoading ? (
@@ -277,6 +305,32 @@ export function NpuDeviceHistoryView() {
                             <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">Loading power history...</div>
                         ) : (
                             <ReactECharts option={powerOption} style={{ height: '320px' }} notMerge={true} />
+                        )}
+                    </div>
+                </Card>
+                </div>
+
+                <Card className="p-0 border-border shadow-sm overflow-hidden 2xl:sticky 2xl:top-6">
+                    <div className="px-4 py-3 border-b border-border bg-muted/20">
+                        <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-sm">Displayed Legend</h4>
+                            <InfoTooltip content="차트에 현재 그려진 디바이스 목록입니다. 노드와 디바이스 이름을 함께 표시해 어떤 라인인지 바로 구분할 수 있게 했습니다." />
+                        </div>
+                    </div>
+                    <div className="max-h-[720px] overflow-auto divide-y divide-border">
+                        {legendSeries.map((item) => (
+                            <div key={item.uuid} className="px-4 py-3 flex items-center gap-3">
+                                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                                <div className="min-w-0">
+                                    <p className="text-sm font-medium text-foreground truncate">{item.legendLabel}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{item.node}</p>
+                                </div>
+                            </div>
+                        ))}
+                        {!legendSeries.length && (
+                            <div className="px-4 py-8 text-sm text-center text-muted-foreground">
+                                표시할 디바이스가 없습니다.
+                            </div>
                         )}
                     </div>
                 </Card>
