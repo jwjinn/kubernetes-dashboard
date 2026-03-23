@@ -1,5 +1,4 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useFilterStore } from '@/store/filterStore';
 import { LayoutDashboard, Bell, User, Box, Activity, Cpu, BarChart3, Server, LogOut } from 'lucide-react';
 import { useAuth } from '@/components/AuthContext';
 import { getEnv } from '@/config/env';
@@ -10,7 +9,6 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
     const location = useLocation();
-    const { selectedCluster, setCluster } = useFilterStore();
     const { logout } = useAuth();
     const acceleratorMode = getEnv('VITE_ACCELERATOR_TYPE', 'GPU');
 
@@ -66,18 +64,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Header (GNB) */}
                 <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 shadow-sm z-10">
-                    <div className="flex items-center gap-4">
-                        <span className="text-sm text-muted-foreground font-medium">Cluster:</span>
-                        <select
-                            value={selectedCluster}
-                            onChange={(e) => setCluster(e.target.value)}
-                            className="bg-background border border-border rounded-md px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none"
-                        >
-                            <option value="all-clusters">All Clusters</option>
-                            <option value="cluster-seoul">Seoul Region</option>
-                            <option value="cluster-tokyo">Tokyo Region</option>
-                        </select>
-                    </div>
+                    <div />
                     <div className="flex items-center gap-4 text-muted-foreground">
                         <button className="p-2 hover:bg-border rounded-full transition-colors relative">
                             <Bell className="w-5 h-5" />
