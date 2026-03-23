@@ -326,7 +326,7 @@ export function NpuDeviceHistoryView() {
                     </Card>
                 </div>
 
-                <Card className="p-0 border-border shadow-sm overflow-hidden flex flex-col min-h-[420px] 2xl:min-h-[1352px] 2xl:h-full 2xl:sticky 2xl:top-6">
+                <Card className="p-0 border-border shadow-sm overflow-hidden flex flex-col h-fit 2xl:sticky 2xl:top-6">
                     <div className="px-4 py-3 border-b border-border bg-muted/20">
                         <div className="flex items-center gap-2">
                             <h4 className="font-bold text-sm">표시 중인 레전드</h4>
@@ -341,7 +341,7 @@ export function NpuDeviceHistoryView() {
                             />
                         </div>
                     </div>
-                    <div className="flex-1 overflow-auto">
+                    <div className="max-h-[720px] overflow-auto">
                         {Object.entries(groupedLegendSeries).map(([nodeName, items]) => (
                             <div key={nodeName} className="border-b border-border last:border-b-0">
                                 <div className="px-4 py-2 text-xs font-bold text-muted-foreground bg-muted/10">
