@@ -43,7 +43,7 @@ function buildLineChartOption(
                     lines.push(
                         `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
                             <span><span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${param.color};margin-right:6px;"></span>${param.seriesName}</span>
-                            <span>avg ${avg} / max ${max}</span>
+                            <span>평균 ${avg} / 최대 ${max}</span>
                         </div>`
                     );
                 });
@@ -70,7 +70,7 @@ function buildLineChartOption(
             max: maxValue,
             axisLabel: { fontSize: 10 },
         },
-        series: series.map((item, index) => ({
+        series: series.map((item) => ({
             name: item.legendLabel,
             type: 'line',
             smooth: true,
@@ -97,6 +97,8 @@ export function NpuDeviceHistoryView() {
     const [selectedNode, setSelectedNode] = useState<string>('all');
     const [topN, setTopN] = useState<string>('3');
     const [topNMetric, setTopNMetric] = useState<string>('util');
+    const [focusedDeviceUuid, setFocusedDeviceUuid] = useState<string | null>(null);
+    const [legendSearch, setLegendSearch] = useState('');
 
     const { data, isLoading } = useQuery({
         queryKey: ['npuDeviceHistory'],
@@ -152,37 +154,62 @@ export function NpuDeviceHistoryView() {
     const visiblePowerSeries = applyTopN(powerSeries);
 
     const legendSeries = useMemo(() => withSeriesStyle(visibleUtilSeries), [visibleUtilSeries]);
-    const utilChartSeries = legendSeries;
-    const memoryChartSeries = useMemo(() => legendSeries.map((legendItem) => {
+    const activeFocusedUuid = focusedDeviceUuid && legendSeries.some((item) => item.uuid === focusedDeviceUuid)
+        ? focusedDeviceUuid
+        : null;
+    const filteredLegendSeries = activeFocusedUuid
+        ? legendSeries.filter((item) => item.uuid === activeFocusedUuid)
+        : legendSeries;
+
+    const utilChartSeries = filteredLegendSeries;
+    const memoryChartSeries = useMemo(() => filteredLegendSeries.map((legendItem) => {
         const match = visibleMemorySeries.find((item) => item.uuid === legendItem.uuid);
         return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
-    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visibleMemorySeries]);
-    const tempChartSeries = useMemo(() => legendSeries.map((legendItem) => {
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [filteredLegendSeries, visibleMemorySeries]);
+    const tempChartSeries = useMemo(() => filteredLegendSeries.map((legendItem) => {
         const match = visibleTempSeries.find((item) => item.uuid === legendItem.uuid);
         return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
-    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visibleTempSeries]);
-    const powerChartSeries = useMemo(() => legendSeries.map((legendItem) => {
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [filteredLegendSeries, visibleTempSeries]);
+    const powerChartSeries = useMemo(() => filteredLegendSeries.map((legendItem) => {
         const match = visiblePowerSeries.find((item) => item.uuid === legendItem.uuid);
         return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
-    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visiblePowerSeries]);
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [filteredLegendSeries, visiblePowerSeries]);
 
-    const displayedDeviceCount = visibleUtilSeries.length;
+    const searchedLegendSeries = useMemo(() => {
+        const keyword = legendSearch.trim().toLowerCase();
+        if (!keyword) return legendSeries;
+        return legendSeries.filter((item) =>
+            item.legendLabel.toLowerCase().includes(keyword) ||
+            item.node.toLowerCase().includes(keyword) ||
+            item.deviceId.toLowerCase().includes(keyword),
+        );
+    }, [legendSearch, legendSeries]);
+
+    const groupedLegendSeries = useMemo(() => {
+        return searchedLegendSeries.reduce((acc, item) => {
+            if (!acc[item.node]) acc[item.node] = [];
+            acc[item.node].push(item);
+            return acc;
+        }, {} as Record<string, Array<DeviceMetricSeries & { color: string; legendLabel: string }>>);
+    }, [searchedLegendSeries]);
+
+    const displayedDeviceCount = filteredLegendSeries.length;
     const timePointCount = data?.timeAxis.length || 0;
 
     const utilOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Utilization', data?.timeAxis || [], utilChartSeries, '%', 100),
+        () => buildLineChartOption('일자별 평균 디바이스 사용률', data?.timeAxis || [], utilChartSeries, '%', 100),
         [data?.timeAxis, utilChartSeries],
     );
     const memoryOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Memory Usage', data?.timeAxis || [], memoryChartSeries, 'GiB'),
+        () => buildLineChartOption('일자별 평균 디바이스 메모리 사용량', data?.timeAxis || [], memoryChartSeries, 'GiB'),
         [data?.timeAxis, memoryChartSeries],
     );
     const tempOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Temperature', data?.timeAxis || [], tempChartSeries, 'C', 100),
+        () => buildLineChartOption('일자별 평균 디바이스 온도', data?.timeAxis || [], tempChartSeries, 'C', 100),
         [data?.timeAxis, tempChartSeries],
     );
     const powerOption = useMemo(
-        () => buildLineChartOption('Daily Average Device Power', data?.timeAxis || [], powerChartSeries, 'W'),
+        () => buildLineChartOption('일자별 평균 디바이스 전력', data?.timeAxis || [], powerChartSeries, 'W'),
         [data?.timeAxis, powerChartSeries],
     );
 
@@ -192,16 +219,13 @@ export function NpuDeviceHistoryView() {
                 <div>
                     <div className="flex items-center gap-2">
                         <h3 className="text-lg font-bold">NPU 디바이스 일자별 평균 추이</h3>
-                        <InfoTooltip content="지난 7일 동안 각 디바이스의 일자별 평균값을 선으로 그리고, hover에서는 같은 날짜의 최대값도 함께 보여줍니다. 기본 노출은 사용자가 고른 기준(Util, Memory, Power)에서 상위 디바이스만 표시합니다." />
+                        <InfoTooltip content="지난 7일 동안 각 디바이스의 일자별 평균값을 선으로 그리고, hover에서는 같은 날짜의 최대값도 함께 보여줍니다. 오른쪽 레전드를 클릭하면 특정 디바이스만 차트에 집중해서 볼 수 있습니다." />
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        시점값이 아니라 하루 평균 기준으로 보도록 바꿨습니다. 라인 겹침은 Top N으로 줄이고, 필요하면 기준과 개수를 바꿔 비교할 수 있습니다.
-                    </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
                     <div className="w-full sm:w-[220px] space-y-1">
-                        <label className="text-xs text-muted-foreground font-bold">Node Filter</label>
+                        <label className="text-xs text-muted-foreground font-bold">노드 필터</label>
                         <Select value={selectedNode} onValueChange={setSelectedNode}>
                             <SelectTrigger className="w-full h-9 text-sm bg-muted/50 border-border">
                                 <SelectValue />
@@ -209,7 +233,7 @@ export function NpuDeviceHistoryView() {
                             <SelectContent>
                                 {nodeOptions.map((node) => (
                                     <SelectItem key={node} value={node}>
-                                        {node === 'all' ? 'All Nodes' : node}
+                                        {node === 'all' ? '전체 노드' : node}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -217,21 +241,21 @@ export function NpuDeviceHistoryView() {
                     </div>
 
                     <div className="w-full sm:w-[220px] space-y-1">
-                        <label className="text-xs text-muted-foreground font-bold">Top N Rank By</label>
+                        <label className="text-xs text-muted-foreground font-bold">Top N 기준</label>
                         <Select value={topNMetric} onValueChange={setTopNMetric}>
                             <SelectTrigger className="w-full h-9 text-sm bg-muted/50 border-border">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="util">Utilization</SelectItem>
-                                <SelectItem value="memory">Memory</SelectItem>
-                                <SelectItem value="power">Power</SelectItem>
+                                <SelectItem value="util">사용률</SelectItem>
+                                <SelectItem value="memory">메모리</SelectItem>
+                                <SelectItem value="power">전력</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
 
                     <div className="w-full sm:w-[220px] space-y-1">
-                        <label className="text-xs text-muted-foreground font-bold">Default Visible Lines</label>
+                        <label className="text-xs text-muted-foreground font-bold">기본 표시 라인 수</label>
                         <Select value={topN} onValueChange={setTopN}>
                             <SelectTrigger className="w-full h-9 text-sm bg-muted/50 border-border">
                                 <SelectValue />
@@ -240,7 +264,7 @@ export function NpuDeviceHistoryView() {
                                 <SelectItem value="3">Top 3</SelectItem>
                                 <SelectItem value="5">Top 5</SelectItem>
                                 <SelectItem value="8">Top 8</SelectItem>
-                                <SelectItem value="all">All</SelectItem>
+                                <SelectItem value="all">전체</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -249,87 +273,123 @@ export function NpuDeviceHistoryView() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-4 border-border shadow-sm">
-                    <Text className="font-bold text-foreground">Displayed Devices</Text>
+                    <Text className="font-bold text-foreground">표시 중인 디바이스</Text>
                     <Metric className="mt-2 text-3xl font-black text-green-600">{displayedDeviceCount}</Metric>
                     <Text className="mt-2 text-xs text-muted-foreground">
-                        {topNMetric === 'util' ? 'Util' : topNMetric === 'memory' ? 'Memory' : 'Power'} 기준 상위 라인
+                        {activeFocusedUuid ? '선택한 디바이스만 집중 표시 중' : `${topNMetric === 'util' ? '사용률' : topNMetric === 'memory' ? '메모리' : '전력'} 기준 상위 라인`}
                     </Text>
                 </Card>
                 <Card className="p-4 border-border shadow-sm">
-                    <Text className="font-bold text-foreground">Observation Window</Text>
+                    <Text className="font-bold text-foreground">관측 기간</Text>
                     <Metric className="mt-2 text-3xl font-black">7d</Metric>
                     <Text className="mt-2 text-xs text-muted-foreground">일자별 평균으로 집계한 최근 7일</Text>
                 </Card>
                 <Card className="p-4 border-border shadow-sm">
-                    <Text className="font-bold text-foreground">Data Points</Text>
+                    <Text className="font-bold text-foreground">데이터 포인트</Text>
                     <Metric className="mt-2 text-3xl font-black">{timePointCount}</Metric>
                     <Text className="mt-2 text-xs text-muted-foreground">날짜 축 기준 샘플 수</Text>
                 </Card>
             </div>
 
-            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_280px] gap-6 items-start">
+            <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-stretch">
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <Card className="p-0 border-border shadow-sm overflow-hidden">
-                    <div className="p-2">
-                        {isLoading ? (
-                            <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">Loading utilization history...</div>
-                        ) : (
-                            <ReactECharts option={utilOption} style={{ height: '320px' }} notMerge={true} />
-                        )}
-                    </div>
-                </Card>
+                    <Card className="p-0 border-border shadow-sm overflow-hidden">
+                        <div className="p-2">
+                            {isLoading ? (
+                                <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">사용률 이력을 불러오는 중입니다...</div>
+                            ) : (
+                                <ReactECharts option={utilOption} style={{ height: '320px' }} notMerge={true} />
+                            )}
+                        </div>
+                    </Card>
 
-                <Card className="p-0 border-border shadow-sm overflow-hidden">
-                    <div className="p-2">
-                        {isLoading ? (
-                            <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">Loading memory history...</div>
-                        ) : (
-                            <ReactECharts option={memoryOption} style={{ height: '320px' }} notMerge={true} />
-                        )}
-                    </div>
-                </Card>
+                    <Card className="p-0 border-border shadow-sm overflow-hidden">
+                        <div className="p-2">
+                            {isLoading ? (
+                                <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">메모리 이력을 불러오는 중입니다...</div>
+                            ) : (
+                                <ReactECharts option={memoryOption} style={{ height: '320px' }} notMerge={true} />
+                            )}
+                        </div>
+                    </Card>
 
-                <Card className="p-0 border-border shadow-sm overflow-hidden">
-                    <div className="p-2">
-                        {isLoading ? (
-                            <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">Loading temperature history...</div>
-                        ) : (
-                            <ReactECharts option={tempOption} style={{ height: '320px' }} notMerge={true} />
-                        )}
-                    </div>
-                </Card>
+                    <Card className="p-0 border-border shadow-sm overflow-hidden">
+                        <div className="p-2">
+                            {isLoading ? (
+                                <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">온도 이력을 불러오는 중입니다...</div>
+                            ) : (
+                                <ReactECharts option={tempOption} style={{ height: '320px' }} notMerge={true} />
+                            )}
+                        </div>
+                    </Card>
 
-                <Card className="p-0 border-border shadow-sm overflow-hidden">
-                    <div className="p-2">
-                        {isLoading ? (
-                            <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">Loading power history...</div>
-                        ) : (
-                            <ReactECharts option={powerOption} style={{ height: '320px' }} notMerge={true} />
-                        )}
-                    </div>
-                </Card>
+                    <Card className="p-0 border-border shadow-sm overflow-hidden">
+                        <div className="p-2">
+                            {isLoading ? (
+                                <div className="h-[320px] flex items-center justify-center text-muted-foreground animate-pulse">전력 이력을 불러오는 중입니다...</div>
+                            ) : (
+                                <ReactECharts option={powerOption} style={{ height: '320px' }} notMerge={true} />
+                            )}
+                        </div>
+                    </Card>
                 </div>
 
-                <Card className="p-0 border-border shadow-sm overflow-hidden 2xl:sticky 2xl:top-6">
+                <Card className="p-0 border-border shadow-sm overflow-hidden flex flex-col min-h-[420px] 2xl:min-h-[1352px] 2xl:h-full 2xl:sticky 2xl:top-6">
                     <div className="px-4 py-3 border-b border-border bg-muted/20">
-                        <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-sm">Displayed Legend</h4>
-                            <InfoTooltip content="차트에 현재 그려진 디바이스 목록입니다. 노드와 디바이스 이름을 함께 표시해 어떤 라인인지 바로 구분할 수 있게 했습니다." />
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-sm">표시 중인 레전드</h4>
+                                <InfoTooltip content="항목을 클릭하면 해당 디바이스만 차트에 남기고 집중해서 볼 수 있습니다. 다시 클릭하면 전체 보기로 돌아갑니다." />
+                            </div>
+                            {activeFocusedUuid && (
+                                <button
+                                    onClick={() => setFocusedDeviceUuid(null)}
+                                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                                >
+                                    전체 보기
+                                </button>
+                            )}
+                        </div>
+                        <div className="mt-3">
+                            <input
+                                value={legendSearch}
+                                onChange={(event) => setLegendSearch(event.target.value)}
+                                placeholder="노드 또는 디바이스 검색"
+                                className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                            />
                         </div>
                     </div>
-                    <div className="max-h-[720px] overflow-auto divide-y divide-border">
-                        {legendSeries.map((item) => (
-                            <div key={item.uuid} className="px-4 py-3 flex items-center gap-3">
-                                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                                <div className="min-w-0">
-                                    <p className="text-sm font-medium text-foreground truncate">{item.legendLabel}</p>
-                                    <p className="text-xs text-muted-foreground truncate">{item.node}</p>
+                    <div className="flex-1 overflow-auto">
+                        {Object.entries(groupedLegendSeries).map(([nodeName, items]) => (
+                            <div key={nodeName} className="border-b border-border last:border-b-0">
+                                <div className="px-4 py-2 text-xs font-bold text-muted-foreground bg-muted/10">
+                                    {nodeName} ({items.length})
+                                </div>
+                                <div className="divide-y divide-border">
+                                    {items.map((item) => {
+                                        const isFocused = activeFocusedUuid === item.uuid;
+                                        return (
+                                            <button
+                                                key={item.uuid}
+                                                onClick={() => setFocusedDeviceUuid(isFocused ? null : item.uuid)}
+                                                className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${isFocused ? 'bg-blue-50 border-l-2 border-blue-500' : 'hover:bg-muted/30'}`}
+                                            >
+                                                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-foreground truncate">{item.legendLabel}</p>
+                                                    <p className="text-xs text-muted-foreground truncate">
+                                                        클릭하면 이 디바이스만 차트에 표시
+                                                    </p>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}
-                        {!legendSeries.length && (
+                        {!searchedLegendSeries.length && (
                             <div className="px-4 py-8 text-sm text-center text-muted-foreground">
-                                표시할 디바이스가 없습니다.
+                                검색 조건에 맞는 디바이스가 없습니다.
                             </div>
                         )}
                     </div>
