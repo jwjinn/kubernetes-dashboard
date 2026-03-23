@@ -130,22 +130,22 @@ export function NpuDeviceHistoryView() {
         }
     }, [memorySeries, powerSeries, topNMetric, utilSeries]);
 
-    const rankedDeviceIds = useMemo(() => {
+    const rankedDeviceUuids = useMemo(() => {
         return [...rankingSource]
             .sort((a, b) => {
                 const avgA = a.avgValues.reduce((sum, value) => sum + value, 0) / Math.max(a.avgValues.length, 1);
                 const avgB = b.avgValues.reduce((sum, value) => sum + value, 0) / Math.max(b.avgValues.length, 1);
                 return avgB - avgA;
             })
-            .map((item) => item.deviceId);
+            .map((item) => item.uuid);
     }, [rankingSource]);
 
-    const displayedDeviceIds = useMemo(() => {
-        if (topN === 'all') return new Set(rankedDeviceIds);
-        return new Set(rankedDeviceIds.slice(0, Number(topN)));
-    }, [rankedDeviceIds, topN]);
+    const displayedDeviceUuids = useMemo(() => {
+        if (topN === 'all') return new Set(rankedDeviceUuids);
+        return new Set(rankedDeviceUuids.slice(0, Number(topN)));
+    }, [rankedDeviceUuids, topN]);
 
-    const applyTopN = (series: DeviceMetricSeries[]) => series.filter((item) => displayedDeviceIds.has(item.deviceId));
+    const applyTopN = (series: DeviceMetricSeries[]) => series.filter((item) => displayedDeviceUuids.has(item.uuid));
 
     const visibleUtilSeries = applyTopN(utilSeries);
     const visibleMemorySeries = applyTopN(memorySeries);
