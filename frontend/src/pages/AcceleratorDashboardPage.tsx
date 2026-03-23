@@ -13,6 +13,7 @@ import { Search } from 'lucide-react';
 import { ClusterOverviewView } from '@/features/accelerator/components/ClusterOverviewView';
 import { HardwareDetailsView } from '@/features/accelerator/components/HardwareDetailsView';
 import { WorkloadMappingView } from '@/features/accelerator/components/WorkloadMappingView';
+import { NpuDeviceHistoryView } from '@/features/accelerator/components/NpuDeviceHistoryView';
 import { getEnv } from '@/config/env';
 
 export default function AcceleratorDashboardPage() {
@@ -156,6 +157,7 @@ export default function AcceleratorDashboardPage() {
                             <TabsTrigger value="overview">Cluster Overview</TabsTrigger>
                             <TabsTrigger value="hardware">Hardware Details</TabsTrigger>
                             <TabsTrigger value="workload">Workload & Pod Mapping</TabsTrigger>
+                            <TabsTrigger value="history">Device History</TabsTrigger>
                         </TabsList>
                         
                         <TabsContent value="overview">
@@ -168,6 +170,10 @@ export default function AcceleratorDashboardPage() {
 
                         <TabsContent value="workload">
                             <WorkloadMappingView />
+                        </TabsContent>
+
+                        <TabsContent value="history">
+                            <NpuDeviceHistoryView />
                         </TabsContent>
                     </Tabs>
                 ) : (

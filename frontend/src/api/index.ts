@@ -87,6 +87,22 @@ export interface NpuProcessContext {
     power: number;
 }
 
+export interface DeviceMetricSeries {
+    deviceId: string;
+    node: string;
+    uuid: string;
+    label: string;
+    values: number[];
+}
+
+export interface NpuDeviceHistoryResponse {
+    timeAxis: string[];
+    utilSeries: DeviceMetricSeries[];
+    memorySeries: DeviceMetricSeries[];
+    temperatureSeries: DeviceMetricSeries[];
+    powerSeries: DeviceMetricSeries[];
+}
+
 // New API functions for the NPU dashboard tabs
 export const fetchNpuClusterOverview = async () => {
     const response = await apiFetch(`/api/npu/cluster-overview`);
@@ -98,6 +114,12 @@ export const fetchNpuClusterOverview = async () => {
 export const fetchNpuWorkloadMapping = async () => {
     const response = await apiFetch(`/api/npu/workload-mapping`);
     if (!response.ok) throw new Error('Failed to fetch NPU workload mapping');
+    return response.json();
+};
+
+export const fetchNpuDeviceHistory = async (): Promise<NpuDeviceHistoryResponse> => {
+    const response = await apiFetch(`/api/npu/device-history`);
+    if (!response.ok) throw new Error('Failed to fetch NPU device history');
     return response.json();
 };
 

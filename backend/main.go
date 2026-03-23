@@ -148,6 +148,7 @@ func main() {
 	mux.HandleFunc("/api/npu/cluster-overview", application.handleNPUClusterOverview)
 	mux.HandleFunc("/api/npu/hardware-details", application.handleNPUHardwareDetails)
 	mux.HandleFunc("/api/npu/workload-mapping", application.handleNPUWorkloadMapping)
+	mux.HandleFunc("/api/npu/device-history", application.handleNPUDeviceHistory)
 	mux.HandleFunc("/api/logs", application.handleLogs)
 	mux.HandleFunc("/api/traces", application.handleTraces)
 

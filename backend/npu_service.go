@@ -44,6 +44,14 @@ type acceleratorTrendItem struct {
 	History  []int  `json:"history"`
 }
 
+type deviceMetricSeries struct {
+	DeviceID string    `json:"deviceId"`
+	Node     string    `json:"node"`
+	UUID     string    `json:"uuid"`
+	Label    string    `json:"label"`
+	Values   []float64 `json:"values"`
+}
+
 type npuClusterOverview struct {
 	TotalCapacity    int                 `json:"totalCapacity"`
 	Allocated        int                 `json:"allocated"`
@@ -80,6 +88,14 @@ type npuTopologyGroup struct {
 type npuWorkloadMapping struct {
 	PodMappings []podMappingRow `json:"podMappings"`
 	Contexts    []processRow    `json:"contexts"`
+}
+
+type npuDeviceHistoryResponse struct {
+	TimeAxis          []string             `json:"timeAxis"`
+	UtilSeries        []deviceMetricSeries `json:"utilSeries"`
+	MemorySeries      []deviceMetricSeries `json:"memorySeries"`
+	TemperatureSeries []deviceMetricSeries `json:"temperatureSeries"`
+	PowerSeries       []deviceMetricSeries `json:"powerSeries"`
 }
 
 type podMappingRow struct {
@@ -185,6 +201,15 @@ func (a *app) handleNPUWorkloadMapping(w http.ResponseWriter, r *http.Request) {
 		PodMappings: snapshot.PodMappings,
 		Contexts:    snapshot.Contexts,
 	})
+}
+
+func (a *app) handleNPUDeviceHistory(w http.ResponseWriter, r *http.Request) {
+	history, err := a.loadNPUDeviceHistory(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, history)
 }
 
 func (a *app) handleNPUTrends(w http.ResponseWriter, r *http.Request) {
@@ -494,6 +519,49 @@ func (a *app) loadNPUTrendHistory(ctx context.Context, devices []npuDeviceState)
 	return history
 }
 
+func (a *app) loadNPUDeviceHistory(ctx context.Context) (*npuDeviceHistoryResponse, error) {
+	payload, err := a.responseCache.GetOrSet("npu-device-history", a.acceleratorTTL, func() (any, error) {
+		requestCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+
+		snapshot, err := a.loadNPUSnapshot(requestCtx)
+		if err != nil {
+			return nil, err
+		}
+
+		end := time.Now().Truncate(2 * time.Hour)
+		start := end.Add(-7 * 24 * time.Hour)
+		step := 2 * time.Hour
+		timeAxis := buildNPUHistoryTimeAxis(start, end, step)
+		targetCount := len(timeAxis)
+
+		loadMetric := func(metricName string) []promResult {
+			results, queryErr := a.observability.queryMetricsRange(requestCtx, npuMetricRange(metricName, "", ""), start, end, step)
+			if queryErr != nil {
+				return nil
+			}
+			return results
+		}
+
+		return &npuDeviceHistoryResponse{
+			TimeAxis:          timeAxis,
+			UtilSeries:        buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuUtilMetric()), targetCount, func(device acceleratorDevice) float64 { return float64(device.Utilization) }, func(value float64) float64 { return value }, func(base float64) float64 { return 18 }, 0, 100),
+			MemorySeries:      buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuDramUsedMetric()), targetCount, func(device acceleratorDevice) float64 { return parseGiBString(device.VramUsage) }, func(value float64) float64 { return value / 1024 / 1024 / 1024 }, func(base float64) float64 { return maxFloat(base*0.18, 0.8) }, 0, 0),
+			TemperatureSeries: buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuTempMetric()), targetCount, func(device acceleratorDevice) float64 { return float64(device.Temperature) }, func(value float64) float64 { return value }, func(base float64) float64 { return 4 }, 0, 100),
+			PowerSeries:       buildDeviceMetricSeries(snapshot.Devices, loadMetric(npuPowerMetric()), targetCount, func(device acceleratorDevice) float64 { return float64(device.Power) }, func(value float64) float64 { return value }, func(base float64) float64 { return 8 }, 0, 200),
+		}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	history, ok := payload.(*npuDeviceHistoryResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected npu device history type")
+	}
+	return history, nil
+}
+
 func buildNPUTopology(devices []acceleratorDevice) []npuTopologyGroup {
 	byNode := make(map[string][]string)
 	for _, device := range devices {
@@ -585,6 +653,34 @@ func mergeNPUStateMeta(current, candidate npuDeviceState) npuDeviceState {
 	return current
 }
 
+func buildDeviceMetricSeries(
+	devices []acceleratorDevice,
+	results []promResult,
+	targetCount int,
+	fallbackValue func(acceleratorDevice) float64,
+	transform func(float64) float64,
+	variation func(float64) float64,
+	minValue float64,
+	maxValue float64,
+) []deviceMetricSeries {
+	series := make([]deviceMetricSeries, 0, len(devices))
+	for _, device := range devices {
+		base := fallbackValue(device)
+		values := compressPromFloatHistory(results, device.UUID, targetCount, base, transform)
+		if len(values) == 0 {
+			values = syntheticFloatHistory(device.UUID, base, targetCount, variation(base), minValue, maxValue)
+		}
+		series = append(series, deviceMetricSeries{
+			DeviceID: device.ID,
+			Node:     device.Node,
+			UUID:     device.UUID,
+			Label:    fmt.Sprintf("%s / %s", device.Node, device.ID),
+			Values:   values,
+		})
+	}
+	return series
+}
+
 func compressPromHistory(results []promResult, uuid string, targetCount, fallback int) []int {
 	var values []float64
 	for _, result := range results {
@@ -619,6 +715,43 @@ func compressPromHistory(results []promResult, uuid string, targetCount, fallbac
 	}
 	for len(history) < targetCount {
 		history = append(history, fallback)
+	}
+	return history
+}
+
+func compressPromFloatHistory(results []promResult, uuid string, targetCount int, fallback float64, transform func(float64) float64) []float64 {
+	var values []float64
+	for _, result := range results {
+		if result.Metric["uuid"] != uuid {
+			continue
+		}
+		for _, pair := range result.Values {
+			if len(pair) != 2 {
+				continue
+			}
+			values = append(values, transform(float64FromAny(pair[1])))
+		}
+	}
+
+	if len(values) == 0 {
+		return nil
+	}
+
+	if len(values) >= targetCount {
+		step := float64(len(values)) / float64(targetCount)
+		history := make([]float64, 0, targetCount)
+		for index := 0; index < targetCount; index++ {
+			history = append(history, roundToOneDecimal(values[int(float64(index)*step)]))
+		}
+		return history
+	}
+
+	history := make([]float64, 0, targetCount)
+	for _, value := range values {
+		history = append(history, roundToOneDecimal(value))
+	}
+	for len(history) < targetCount {
+		history = append(history, roundToOneDecimal(fallback))
 	}
 	return history
 }
@@ -672,6 +805,12 @@ func bytesToGiBString(value float64) string {
 	return fmt.Sprintf("%.1f GiB", value/1024/1024/1024)
 }
 
+func parseGiBString(value string) float64 {
+	trimmed := strings.TrimSpace(strings.TrimSuffix(value, "GiB"))
+	parsed, _ := strconv.ParseFloat(strings.TrimSpace(trimmed), 64)
+	return parsed
+}
+
 func clampInt(value, minValue, maxValue int) int {
 	if value < minValue {
 		return minValue
@@ -700,6 +839,45 @@ func syntheticHistory(seed string, base, count int) []int {
 		history = append(history, clampInt(value, 0, 100))
 	}
 	return history
+}
+
+func syntheticFloatHistory(seed string, base float64, count int, variation float64, minValue float64, maxValue float64) []float64 {
+	history := make([]float64, 0, count)
+	hash := 0
+	for _, r := range seed {
+		hash += int(r)
+	}
+	for index := 0; index < count; index++ {
+		delta := float64(((hash + index*11) % 21) - 10)
+		value := base + delta*(variation/10)
+		if value < minValue {
+			value = minValue
+		}
+		if maxValue > minValue && value > maxValue {
+			value = maxValue
+		}
+		history = append(history, roundToOneDecimal(value))
+	}
+	return history
+}
+
+func buildNPUHistoryTimeAxis(start, end time.Time, step time.Duration) []string {
+	timeAxis := make([]string, 0)
+	for current := start; !current.After(end); current = current.Add(step) {
+		timeAxis = append(timeAxis, current.Format("01-02 15:04"))
+	}
+	return timeAxis
+}
+
+func roundToOneDecimal(value float64) float64 {
+	return float64(int(value*10+0.5)) / 10
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func acceleratorCapacity(resources corev1.ResourceList, mode string) int {
