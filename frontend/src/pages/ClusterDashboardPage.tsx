@@ -127,7 +127,13 @@ export default function ClusterDashboardPage() {
                         <Flex alignItems="center" justifyContent="between">
                             <Text className="font-bold text-foreground overflow-hidden text-ellipsis whitespace-nowrap flex items-center gap-1">
                                 평균 시스템 로드 (1분)
-                                <InfoTooltip content="최근 1분 동안의 평균 시스템 부하입니다. CPU 코어 수와 비슷하거나 더 높아지면 해당 노드가 바쁘다는 뜻으로 볼 수 있습니다." />
+                                <InfoTooltip content={
+                                    <div className="space-y-2">
+                                        <p>최근 1분 동안 이 노드에서 CPU를 쓰려고 하거나 실행 대기 중인 작업이 얼마나 몰렸는지 보여주는 값입니다.</p>
+                                        <p>CPU 사용률과 완전히 같지는 않지만, 일이 밀리고 있는지 빠르게 파악하는 데 유용합니다.</p>
+                                        <p>보통 값이 노드의 CPU 코어 수와 비슷하거나 더 높게 오래 유지되면, 해당 노드가 바쁘거나 병목이 생겼다고 해석하면 됩니다.</p>
+                                    </div>
+                                } />
                             </Text>
                             <Activity className="w-5 h-5 text-amber-500 flex-shrink-0" />
                         </Flex>

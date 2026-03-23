@@ -111,7 +111,7 @@ export function AcceleratorHexMap({
                                         className={`
                                             relative flex items-center justify-center font-bold transition-all duration-300 hover:scale-110 hover:z-20 cursor-pointer text-sm
                                             ${getColor(device)}
-                                            ${isNpu ? 'w-8 h-9 text-[10px]' : 'w-12 h-14 bg-clip-padding'}
+                                            ${isNpu ? 'h-10 min-w-[3.4rem] px-2 text-[12px] leading-none' : 'w-12 h-14 bg-clip-padding'}
                                         `}
                                         style={Object.assign({ clipPath }, !isNpu ? {
                                             marginLeft: isEvenRow && index % 10 === 0 ? '1.5rem' : '-0.25rem',
@@ -122,26 +122,10 @@ export function AcceleratorHexMap({
                                     </div>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="p-3 bg-background/95 backdrop-blur border border-border shadow-xl z-50">
-                                    <div className="space-y-1.5 text-xs min-w-[150px]">
-                                        <div className="flex justify-between border-b border-border/50 pb-1">
-                                            <span className="text-muted-foreground">ID</span>
-                                            <span className="font-mono font-bold">{device.id}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-border/50 pb-1">
-                                            <span className="text-muted-foreground">Model</span>
-                                            <span>{device.model}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-border/50 pb-1">
-                                            <span className="text-muted-foreground">Status</span>
-                                            <span>{device.status}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-border/50 pb-1">
+                                    <div className="text-xs min-w-[90px]">
+                                        <div className="flex items-center justify-between gap-3">
                                             <span className="text-muted-foreground">Util</span>
                                             <span className={`font-bold ${isNpu ? 'text-green-600' : 'text-blue-600'}`}>{device.utilization}%</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Observed Pod Label</span>
-                                            <span className="truncate max-w-[80px]">{device.pod || '-'}</span>
                                         </div>
                                     </div>
                                 </TooltipContent>
