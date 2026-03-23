@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Bell, User, Box, Activity, Cpu, BarChart3, Server, LogOut } from 'lucide-react';
+import { LayoutDashboard, Bell, User, Box, Activity, Cpu, Server, LogOut } from 'lucide-react';
 import { useAuth } from '@/components/AuthContext';
 import { getEnv } from '@/config/env';
 
@@ -21,7 +21,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const acceleratorNavItems = [
         { name: `${acceleratorMode} Dashboard`, href: '/accelerator', icon: Cpu },
-        { name: `${acceleratorMode} Trends (통계)`, href: '/accelerator-trend', icon: BarChart3 },
     ];
 
     const navItems = [

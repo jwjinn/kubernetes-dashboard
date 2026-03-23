@@ -6,7 +6,6 @@ import ContainerMapPage from '@/pages/ContainerMapPage';
 import WorkloadPage from '@/pages/WorkloadPage';
 import AnalysisPage from '@/pages/AnalysisPage';
 import AcceleratorDashboardPage from '@/pages/AcceleratorDashboardPage';
-import AcceleratorTrendPage from '@/pages/AcceleratorTrendPage';
 import ClusterDashboardPage from '@/pages/ClusterDashboardPage';
 import LoginPage from '@/pages/LoginPage';
 import { Toaster } from '@/components/ui/toaster';
@@ -28,7 +27,7 @@ function App() {
             <Route path="/containers" element={<PrivateRoute><ContainerMapPage /></PrivateRoute>} />
             <Route path="/workloads" element={<PrivateRoute><WorkloadPage /></PrivateRoute>} />
             <Route path="/accelerator" element={<PrivateRoute><AcceleratorDashboardPage /></PrivateRoute>} />
-            <Route path="/accelerator-trend" element={<PrivateRoute><AcceleratorTrendPage /></PrivateRoute>} />
+            <Route path="/accelerator-trend" element={<Navigate to="/accelerator" replace />} />
             <Route path="/analysis" element={<PrivateRoute><AnalysisPage /></PrivateRoute>} />
           </Routes>
         </BrowserRouter>

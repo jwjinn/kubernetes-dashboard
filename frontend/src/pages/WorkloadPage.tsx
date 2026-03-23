@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Bot, LoaderCircle, Send, ShieldAlert, Sparkles } from 'lucide-react';
 import { formatClockTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -85,6 +86,31 @@ function getNodeLabel(nodeId: string) {
             return '종합';
         case 'end':
             return '완료';
+        default:
+            return nodeId;
+    }
+}
+
+function getNodeDescription(nodeId: string) {
+    switch (nodeId) {
+        case 'start':
+            return '사용자 질문을 접수하고 진단 워크플로우를 시작하는 단계입니다.';
+        case 'router':
+            return '질문의 성격을 보고 단일 응답으로 끝낼지, 여러 데이터 소스를 조회하는 진단 흐름으로 보낼지 결정합니다.';
+        case 'simple_agent':
+            return '추가 조회 없이 바로 답할 수 있는 질문이면 이 단계에서 빠르게 응답을 생성합니다.';
+        case 'orchestrator':
+            return '여러 하위 작업을 조율하는 중심 단계입니다. Kubernetes, 메트릭, 로그 조회 필요 여부를 정하고 결과를 모읍니다.';
+        case 'worker_k8s':
+            return 'Pod, Node, 이벤트, 상태 정보 등 Kubernetes API 기반 정보를 조회하는 단계입니다.';
+        case 'worker_metric':
+            return '메트릭 저장소를 조회해 자원 사용량, 부하, 이상 징후를 확인하는 단계입니다.';
+        case 'worker_log':
+            return '중앙 로그 또는 Pod 로그를 조회해 오류 메시지, 경고, 장애 단서를 찾는 단계입니다.';
+        case 'synthesizer':
+            return '수집한 Kubernetes 상태, 메트릭, 로그를 함께 해석해 원인과 대응 방향을 정리하는 단계입니다.';
+        case 'end':
+            return '진단 결과 생성을 마치고 사용자에게 최종 응답을 전달하는 단계입니다.';
         default:
             return nodeId;
     }
@@ -415,7 +441,18 @@ export default function WorkloadPage() {
                                                 nodeStatusClass(nodeStatusMap[nodeId]),
                                             )}
                                         >
-                                            <div className="font-medium leading-4">{getNodeLabel(nodeId)}</div>
+                                            <TooltipProvider delayDuration={100}>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <div className="font-medium leading-4 cursor-help w-fit">
+                                                            {getNodeLabel(nodeId)}
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top" className="max-w-[260px] leading-relaxed">
+                                                        {getNodeDescription(nodeId)}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                             <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-80">
                                                 {nodeStatusMap[nodeId] || 'idle'}
                                             </div>
