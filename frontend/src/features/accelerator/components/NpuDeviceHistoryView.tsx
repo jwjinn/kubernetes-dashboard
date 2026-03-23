@@ -97,7 +97,6 @@ export function NpuDeviceHistoryView() {
     const [selectedNode, setSelectedNode] = useState<string>('all');
     const [topN, setTopN] = useState<string>('3');
     const [topNMetric, setTopNMetric] = useState<string>('util');
-    const [focusedDeviceUuid, setFocusedDeviceUuid] = useState<string | null>(null);
     const [legendSearch, setLegendSearch] = useState('');
 
     const { data, isLoading } = useQuery({
@@ -154,26 +153,19 @@ export function NpuDeviceHistoryView() {
     const visiblePowerSeries = applyTopN(powerSeries);
 
     const legendSeries = useMemo(() => withSeriesStyle(visibleUtilSeries), [visibleUtilSeries]);
-    const activeFocusedUuid = focusedDeviceUuid && legendSeries.some((item) => item.uuid === focusedDeviceUuid)
-        ? focusedDeviceUuid
-        : null;
-    const filteredLegendSeries = activeFocusedUuid
-        ? legendSeries.filter((item) => item.uuid === activeFocusedUuid)
-        : legendSeries;
-
-    const utilChartSeries = filteredLegendSeries;
-    const memoryChartSeries = useMemo(() => filteredLegendSeries.map((legendItem) => {
+    const utilChartSeries = legendSeries;
+    const memoryChartSeries = useMemo(() => legendSeries.map((legendItem) => {
         const match = visibleMemorySeries.find((item) => item.uuid === legendItem.uuid);
         return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
-    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [filteredLegendSeries, visibleMemorySeries]);
-    const tempChartSeries = useMemo(() => filteredLegendSeries.map((legendItem) => {
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visibleMemorySeries]);
+    const tempChartSeries = useMemo(() => legendSeries.map((legendItem) => {
         const match = visibleTempSeries.find((item) => item.uuid === legendItem.uuid);
         return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
-    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [filteredLegendSeries, visibleTempSeries]);
-    const powerChartSeries = useMemo(() => filteredLegendSeries.map((legendItem) => {
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visibleTempSeries]);
+    const powerChartSeries = useMemo(() => legendSeries.map((legendItem) => {
         const match = visiblePowerSeries.find((item) => item.uuid === legendItem.uuid);
         return match ? { ...match, color: legendItem.color, legendLabel: legendItem.legendLabel } : null;
-    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [filteredLegendSeries, visiblePowerSeries]);
+    }).filter(Boolean) as Array<DeviceMetricSeries & { color: string; legendLabel: string }>, [legendSeries, visiblePowerSeries]);
 
     const searchedLegendSeries = useMemo(() => {
         const keyword = legendSearch.trim().toLowerCase();
@@ -193,7 +185,7 @@ export function NpuDeviceHistoryView() {
         }, {} as Record<string, Array<DeviceMetricSeries & { color: string; legendLabel: string }>>);
     }, [searchedLegendSeries]);
 
-    const displayedDeviceCount = filteredLegendSeries.length;
+    const displayedDeviceCount = legendSeries.length;
     const timePointCount = data?.timeAxis.length || 0;
 
     const utilOption = useMemo(
@@ -219,7 +211,7 @@ export function NpuDeviceHistoryView() {
                 <div>
                     <div className="flex items-center gap-2">
                         <h3 className="text-lg font-bold">NPU 디바이스 일자별 평균 추이</h3>
-                        <InfoTooltip content="지난 7일 동안 각 디바이스의 일자별 평균값을 선으로 그리고, hover에서는 같은 날짜의 최대값도 함께 보여줍니다. 오른쪽 레전드를 클릭하면 특정 디바이스만 차트에 집중해서 볼 수 있습니다." />
+                        <InfoTooltip content="지난 7일 동안 각 디바이스의 일자별 평균값을 선으로 그리고, hover에서는 같은 날짜의 최대값도 함께 보여줍니다. 오른쪽 레전드는 현재 차트에 그려진 디바이스를 노드별로 쉽게 찾기 위한 목록입니다." />
                     </div>
                 </div>
 
@@ -276,7 +268,7 @@ export function NpuDeviceHistoryView() {
                     <Text className="font-bold text-foreground">표시 중인 디바이스</Text>
                     <Metric className="mt-2 text-3xl font-black text-green-600">{displayedDeviceCount}</Metric>
                     <Text className="mt-2 text-xs text-muted-foreground">
-                        {activeFocusedUuid ? '선택한 디바이스만 집중 표시 중' : `${topNMetric === 'util' ? '사용률' : topNMetric === 'memory' ? '메모리' : '전력'} 기준 상위 라인`}
+                        {`${topNMetric === 'util' ? '사용률' : topNMetric === 'memory' ? '메모리' : '전력'} 기준 상위 라인`}
                     </Text>
                 </Card>
                 <Card className="p-4 border-border shadow-sm">
@@ -336,19 +328,9 @@ export function NpuDeviceHistoryView() {
 
                 <Card className="p-0 border-border shadow-sm overflow-hidden flex flex-col min-h-[420px] 2xl:min-h-[1352px] 2xl:h-full 2xl:sticky 2xl:top-6">
                     <div className="px-4 py-3 border-b border-border bg-muted/20">
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-sm">표시 중인 레전드</h4>
-                                <InfoTooltip content="항목을 클릭하면 해당 디바이스만 차트에 남기고 집중해서 볼 수 있습니다. 다시 클릭하면 전체 보기로 돌아갑니다." />
-                            </div>
-                            {activeFocusedUuid && (
-                                <button
-                                    onClick={() => setFocusedDeviceUuid(null)}
-                                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
-                                >
-                                    전체 보기
-                                </button>
-                            )}
+                        <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-sm">표시 중인 레전드</h4>
+                            <InfoTooltip content="현재 차트에 그려진 디바이스 목록입니다. 노드별로 묶여 있어서 노드 수가 늘어나도 원하는 디바이스를 검색하고 빠르게 찾을 수 있습니다." />
                         </div>
                         <div className="mt-3">
                             <input
@@ -367,21 +349,19 @@ export function NpuDeviceHistoryView() {
                                 </div>
                                 <div className="divide-y divide-border">
                                     {items.map((item) => {
-                                        const isFocused = activeFocusedUuid === item.uuid;
                                         return (
-                                            <button
+                                            <div
                                                 key={item.uuid}
-                                                onClick={() => setFocusedDeviceUuid(isFocused ? null : item.uuid)}
-                                                className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${isFocused ? 'bg-blue-50 border-l-2 border-blue-500' : 'hover:bg-muted/30'}`}
+                                                className="w-full px-4 py-3 flex items-center gap-3 text-left transition-colors hover:bg-muted/20"
                                             >
                                                 <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-medium text-foreground truncate">{item.legendLabel}</p>
                                                     <p className="text-xs text-muted-foreground truncate">
-                                                        클릭하면 이 디바이스만 차트에 표시
+                                                        {item.node}
                                                     </p>
                                                 </div>
-                                            </button>
+                                            </div>
                                         );
                                     })}
                                 </div>
